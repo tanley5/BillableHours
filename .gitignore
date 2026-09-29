@@ -1,0 +1,17 @@
+.env.local
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+media/
+*.sqlite3
+node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+.DS_Store
+openapi.generated.yaml
