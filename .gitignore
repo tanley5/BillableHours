@@ -13,5 +13,6 @@ media/
 node_modules/
 frontend/dist/*
 !frontend/dist/.gitkeep
+!frontend/dist/index.html
 .DS_Store
-openapi.generated.yaml
+backend/openapi.yaml

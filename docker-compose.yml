@@ -1,0 +1,61 @@
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/srv/frontend:ro
+    depends_on:
+      - api
+      - web
+
+  api:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - photo_storage:/media
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  web:
+    image: caddy:2.8-alpine
+    volumes:
+      - ./frontend/dist:/srv:ro
+      - ./frontend/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: billable
+      POSTGRES_USER: billable
+      POSTGRES_PASSWORD: billable
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billable -d billable"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:1.64.0
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost/n8n/
+    volumes:
+      - n8n_data:/home/node/.n8n
+    profiles:
+      - notify
+
+volumes:
+  pgdata:
+  photo_storage:
+  n8n_data:

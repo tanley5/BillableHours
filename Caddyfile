@@ -1,0 +1,22 @@
+:80 {
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /admin/* {
+		reverse_proxy api:8000
+	}
+
+	handle /schema/* {
+		reverse_proxy api:8000
+	}
+
+	handle /n8n/* {
+		uri strip_prefix /n8n
+		reverse_proxy n8n:5678
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}
