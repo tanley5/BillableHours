@@ -92,7 +92,7 @@ Docker Compose, run locally. Access the app at `http://localhost`, which Chrome 
 
 Services:
 - Reverse proxy (Caddy)
-- Web app: React or Vue PWA (pick one before phase 2)
+- Web app: Vue PWA (chosen for Phase 2)
 - API: Django + DRF
 - Postgres
 - Photo storage: Docker volume, accessed through Django's storage backend

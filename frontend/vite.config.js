@@ -1,9 +1,25 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
+import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg'],
+      manifest: {
+        name: 'Billable Hours',
+        short_name: 'Billable',
+        description: 'Contractor billable hours and photo log',
+        theme_color: '#1f3d2a',
+        background_color: '#f3f6f1',
+        display: 'standalone',
+        start_url: '/',
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

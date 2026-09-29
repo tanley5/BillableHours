@@ -1,0 +1,23 @@
+:root {
+  color: #1a241c;
+  background:
+    radial-gradient(circle at top left, #dfeadf 0, transparent 40%),
+    linear-gradient(180deg, #f3f6f1 0%, #e7eee4 100%);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  line-height: 1.45;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+a { color: inherit; }

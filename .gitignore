@@ -12,8 +12,7 @@ htmlcov/
 media/
 *.sqlite3
 node_modules/
-frontend/dist/*
-!frontend/dist/.gitkeep
-!frontend/dist/index.html
+frontend/dist/
+frontend/dev-dist/
 .DS_Store
 backend/openapi.yaml
