@@ -39,7 +39,10 @@ class SeedScenarioCommandTests(TestCase):
         for issue in found:
             self.assertTrue(issue.photos.filter(kind=Photo.Kind.BEFORE).exists())
             self.assertTrue(issue.photos.filter(kind=Photo.Kind.AFTER).exists())
-            self.assertEqual(issue.status, Job.Status.COMPLETE)
+            self.assertIn(
+                issue.status,
+                {Job.Status.COMPLETE, Job.Status.APPROVED, Job.Status.DISPUTED},
+            )
 
         # At least one approved job and one disputed job with client comment
         self.assertTrue(
