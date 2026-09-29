@@ -128,3 +128,7 @@ PHOTO_MAX_PER_KIND = 10
 PHOTO_MAX_DIMENSION = 1920
 VISIT_MAX_HOURS = 16
 TOKEN_BYTES = 32
+
+# n8n notifications (empty disables delivery)
+N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "")
+N8N_WEBHOOK_TIMEOUT = float(os.environ.get("N8N_WEBHOOK_TIMEOUT", "3"))

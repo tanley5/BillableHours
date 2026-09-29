@@ -8,16 +8,21 @@ services:
     depends_on:
       - api
       - web
+      - n8n
 
   api:
     build: ./backend
     env_file: .env
+    environment:
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/billable-events}
     volumes:
       - ./backend:/app
       - photo_storage:/media
     depends_on:
       db:
         condition: service_healthy
+      n8n:
+        condition: service_started
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
@@ -50,8 +55,9 @@ services:
       WEBHOOK_URL: http://localhost/n8n/
     volumes:
       - n8n_data:/home/node/.n8n
-    profiles:
-      - notify
+      - ./n8n/workflows:/workflows:ro
+    expose:
+      - "5678"
 
 volumes:
   pgdata:

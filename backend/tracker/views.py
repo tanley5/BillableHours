@@ -33,6 +33,7 @@ from .serializers import (
     VisitUpdateSerializer,
 )
 from . import services
+from . import notify as notifications
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +306,7 @@ class ContractorJobListCreateView(ContractorBaseView):
         serializer = JobCreateSerializer(data=request.data, context={"assignment": self.assignment})
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
+        notifications.notify_job_created(job)
         ctx = {"request": request, "contractor_token": token, "nest_found_issues": False}
         return Response(JobSerializer(job, context=ctx).data, status=status.HTTP_201_CREATED)
 
@@ -355,6 +357,7 @@ class ContractorVisitListCreateView(ContractorBaseView):
         serializer = VisitCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         visit = Visit.objects.create(assignment=self.assignment, **serializer.validated_data)
+        notifications.notify_visit_created(visit)
         return Response(VisitSerializer(visit).data, status=status.HTTP_201_CREATED)
 
 
@@ -378,6 +381,7 @@ class ContractorResubmitJobView(ContractorBaseView):
         serializer = ResubmitJobSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         replacement = services.resubmit_job(job, **serializer.validated_data)
+        notifications.notify_resubmit(kind="job", original_id=job.id, replacement=replacement)
         ctx = {"request": request, "contractor_token": token, "nest_found_issues": False}
         return Response(JobSerializer(replacement, context=ctx).data, status=status.HTTP_201_CREATED)
 
@@ -388,6 +392,7 @@ class ContractorResubmitVisitView(ContractorBaseView):
         serializer = ResubmitVisitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         replacement = services.resubmit_visit(visit, **serializer.validated_data)
+        notifications.notify_resubmit(kind="visit", original_id=visit.id, replacement=replacement)
         return Response(VisitSerializer(replacement).data, status=status.HTTP_201_CREATED)
 
 

@@ -1,0 +1,111 @@
+{
+  "name": "Billable Hours Events",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "billable-events",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-billable-events",
+      "name": "Billable Events Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "billable-events"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event}}",
+              "operation": "equals",
+              "value2": "job.found_issue"
+            }
+          ]
+        }
+      },
+      "id": "if-found-issue",
+      "name": "Is Found Issue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "summary",
+              "value": "={{$json.event}} · {{$json.data.project_name}} · {{$json.data.label || $json.data.date || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-summary",
+      "name": "Format Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [780, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "summary",
+              "value": "FOUND ISSUE · {{$json.data.project_name}} · {{$json.data.label}} under job {{$json.data.parent_id}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-found-issue",
+      "name": "Format Found Issue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [780, 400]
+    }
+  ],
+  "connections": {
+    "Billable Events Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Found Issue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Found Issue?": {
+      "main": [
+        [
+          {
+            "node": "Format Found Issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
