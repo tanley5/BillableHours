@@ -77,11 +77,17 @@ function mountDashboard(overrides = {}) {
         contractor: { name: 'Blair' },
       }),
       listContractors: vi.fn().mockResolvedValue([]),
+      createSubJob: vi.fn().mockResolvedValue({}),
+      approveSubJob: vi.fn().mockResolvedValue({}),
+      denySubJob: vi.fn().mockResolvedValue({}),
+      acceptSubmission: vi.fn().mockResolvedValue({}),
+      rejectSubmission: vi.fn().mockResolvedValue({}),
+      loadActivity: vi.fn().mockResolvedValue([]),
       exportUrl: '/api/projects/3/export.csv',
       ...overrides,
     },
     global: {
-      stubs: { DragAssignBoard: true },
+      stubs: { DragAssignBoard: true, SubJobsPanel: true },
     },
   })
 }

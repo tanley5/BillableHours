@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from rest_framework import generics, status
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -22,7 +22,19 @@ from .auth import (
     get_owned_assignment,
 )
 from .images import process_uploaded_image
-from .models import Assignment, ClientContractor, Contractor, Job, Photo, Project, Visit
+from .models import (
+    Assignment,
+    ClientContractor,
+    Contractor,
+    Job,
+    Photo,
+    Project,
+    SubJob,
+    SubJobPhoto,
+    Submission,
+    SubmissionPhoto,
+    Visit,
+)
 from .serializers import (
     AssignmentCreateSerializer,
     AssignmentSerializer,
@@ -40,6 +52,8 @@ from .serializers import (
     ResubmitJobSerializer,
     ResubmitVisitSerializer,
     SetPasswordSerializer,
+    SubJobSerializer,
+    SubmissionSerializer,
     VisitCreateSerializer,
     VisitSerializer,
     VisitUpdateSerializer,
@@ -440,6 +454,8 @@ class ContractorAssignmentAcceptView(APIView):
     permission_classes = [IsAuthenticated, IsContractor]
 
     def post(self, request, pk):
+        from .subjobs import recompute_project_status
+
         assignment = get_owned_assignment(request, pk)
         if assignment.status != Assignment.Status.INVITED:
             return Response(
@@ -449,6 +465,7 @@ class ContractorAssignmentAcceptView(APIView):
         assignment.status = Assignment.Status.ACCEPTED
         assignment.responded_at = timezone.now()
         assignment.save(update_fields=["status", "responded_at"])
+        recompute_project_status(assignment.project)
         return Response(AssignmentSerializer(assignment).data)
 
 
@@ -456,6 +473,8 @@ class ContractorAssignmentRejectView(APIView):
     permission_classes = [IsAuthenticated, IsContractor]
 
     def post(self, request, pk):
+        from .subjobs import recompute_project_status
+
         assignment = get_owned_assignment(request, pk)
         if assignment.status != Assignment.Status.INVITED:
             return Response(
@@ -465,6 +484,18 @@ class ContractorAssignmentRejectView(APIView):
         assignment.status = Assignment.Status.REJECTED
         assignment.responded_at = timezone.now()
         assignment.save(update_fields=["status", "responded_at"])
+        recompute_project_status(assignment.project)
+        return Response(AssignmentSerializer(assignment).data)
+
+
+class ContractorAssignmentInRouteView(APIView):
+    permission_classes = [IsAuthenticated, IsContractor]
+
+    def post(self, request, pk):
+        from .subjobs import confirm_in_route
+
+        assignment = get_owned_assignment(request, pk)
+        assignment = confirm_in_route(assignment)
         return Response(AssignmentSerializer(assignment).data)
 
 
@@ -670,3 +701,210 @@ class StripeWebhookView(APIView):
             stripe_connect.apply_account_updated(account)
 
         return Response({"received": True})
+
+
+# ---------------------------------------------------------------------------
+# SubJobs / Submissions / activity (SPEC2 phase 3)
+# ---------------------------------------------------------------------------
+
+
+class ProjectSubJobListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request, pk):
+        project = get_object_or_404(Project, pk=pk, owner=request.user)
+        qs = project.sub_jobs.prefetch_related("before_photos", "submissions__photos").order_by("created_at")
+        return Response(SubJobSerializer(qs, many=True, context={"request": request}).data)
+
+    def post(self, request, pk):
+        from decimal import Decimal
+
+        from .images import process_uploaded_image
+        from .subjobs import create_client_subjob
+
+        project = get_object_or_404(Project, pk=pk, owner=request.user)
+        label = request.data.get("label")
+        amount = request.data.get("amount")
+        before = request.data.get("before_photo") or request.FILES.get("before_photo")
+        if not label:
+            return Response({"label": "Required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            amount_dec = Decimal(str(amount)) if amount not in (None, "") else None
+        except Exception:
+            return Response({"amount": "Invalid amount."}, status=status.HTTP_400_BAD_REQUEST)
+        if before is not None:
+            before = process_uploaded_image(before)
+        sub = create_client_subjob(
+            project=project, label=label, amount=amount_dec, before_file=before
+        )
+        return Response(
+            SubJobSerializer(sub, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ProjectActivityView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def get(self, request, pk):
+        from .subjobs import project_activity_feed
+
+        project = get_object_or_404(Project, pk=pk, owner=request.user)
+        return Response(project_activity_feed(project))
+
+
+class SubJobApproveView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def post(self, request, pk):
+        from decimal import Decimal
+
+        from .subjobs import approve_and_fund_subjob
+
+        sub = get_object_or_404(SubJob, pk=pk, project__owner=request.user)
+        try:
+            amount = Decimal(str(request.data.get("amount")))
+        except Exception:
+            return Response({"amount": "Invalid amount."}, status=status.HTTP_400_BAD_REQUEST)
+        sub = approve_and_fund_subjob(sub, amount=amount)
+        return Response(SubJobSerializer(sub, context={"request": request}).data)
+
+
+class SubJobDenyView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def post(self, request, pk):
+        from .subjobs import deny_subjob
+
+        sub = get_object_or_404(SubJob, pk=pk, project__owner=request.user)
+        sub = deny_subjob(sub, reason=request.data.get("reason", ""))
+        return Response(SubJobSerializer(sub, context={"request": request}).data)
+
+
+class SubmissionAcceptView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def post(self, request, pk):
+        from .subjobs import accept_submission
+
+        submission = get_object_or_404(Submission, pk=pk, sub_job__project__owner=request.user)
+        submission = accept_submission(submission, reviewer=request.user)
+        return Response(SubmissionSerializer(submission, context={"request": request}).data)
+
+
+class SubmissionRejectView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def post(self, request, pk):
+        from .subjobs import reject_submission
+
+        submission = get_object_or_404(Submission, pk=pk, sub_job__project__owner=request.user)
+        submission = reject_submission(
+            submission, reviewer=request.user, reason=request.data.get("reason", "")
+        )
+        return Response(SubmissionSerializer(submission, context={"request": request}).data)
+
+
+class ContractorSubJobListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsContractor]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request, pk):
+        assignment = get_owned_assignment(request, pk)
+        qs = (
+            SubJob.objects.filter(project=assignment.project)
+            .prefetch_related("before_photos", "submissions__photos")
+            .order_by("created_at")
+        )
+        return Response(SubJobSerializer(qs, many=True, context={"request": request}).data)
+
+    def post(self, request, pk):
+        from .images import process_uploaded_image
+        from .subjobs import create_contractor_subjob
+
+        assignment = get_owned_assignment(request, pk)
+        assert_assignment_accepted(assignment)
+        label = request.data.get("label")
+        before = request.data.get("before_photo") or request.FILES.get("before_photo")
+        if not label:
+            return Response({"label": "Required."}, status=status.HTTP_400_BAD_REQUEST)
+        if before is not None:
+            before = process_uploaded_image(before)
+        sub = create_contractor_subjob(
+            project=assignment.project,
+            contractor=assignment.contractor,
+            label=label,
+            before_file=before,
+        )
+        return Response(
+            SubJobSerializer(sub, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ContractorSubmissionCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsContractor]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk, sub_job_id):
+        from decimal import Decimal
+
+        from .images import process_uploaded_image
+        from .subjobs import create_submission
+
+        assignment = get_owned_assignment(request, pk)
+        assert_assignment_accepted(assignment)
+        sub = get_object_or_404(SubJob, pk=sub_job_id, project=assignment.project)
+        after = request.data.get("after_photo") or request.FILES.get("after_photo")
+        if after is not None:
+            after = process_uploaded_image(after)
+        try:
+            hours = Decimal(str(request.data.get("hours")))
+        except Exception:
+            return Response({"hours": "Invalid hours."}, status=status.HTTP_400_BAD_REQUEST)
+        submission = create_submission(
+            sub_job=sub,
+            contractor=assignment.contractor,
+            hours=hours,
+            notes=request.data.get("notes", ""),
+            after_file=after,
+        )
+        return Response(
+            SubmissionSerializer(submission, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SubJobPhotoDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        photo = get_object_or_404(SubJobPhoto, pk=pk)
+        project = photo.sub_job.project
+        if request.user.role == "client" and project.owner_id == request.user.id:
+            return FileResponse(photo.file.open("rb"), content_type="image/jpeg")
+        if request.user.role == "contractor":
+            contractor = get_contractor(request)
+            if Assignment.objects.filter(
+                project=project,
+                contractor=contractor,
+                status=Assignment.Status.ACCEPTED,
+            ).exists():
+                return FileResponse(photo.file.open("rb"), content_type="image/jpeg")
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+class SubmissionPhotoDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        photo = get_object_or_404(SubmissionPhoto, pk=pk)
+        project = photo.submission.sub_job.project
+        if request.user.role == "client" and project.owner_id == request.user.id:
+            return FileResponse(photo.file.open("rb"), content_type="image/jpeg")
+        if request.user.role == "contractor":
+            contractor = get_contractor(request)
+            if photo.submission.contractor_id == contractor.id:
+                return FileResponse(photo.file.open("rb"), content_type="image/jpeg")
+        return Response(status=status.HTTP_404_NOT_FOUND)

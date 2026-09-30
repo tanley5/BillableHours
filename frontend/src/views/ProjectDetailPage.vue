@@ -68,6 +68,12 @@ async function refresh() {
       :on-cancel="(id) => api.cancelAssignment(id)"
       :on-assign="(payload) => api.createAssignment(projectId, payload)"
       :list-contractors="(projectId) => api.listContractors(projectId)"
+      :create-sub-job="(form) => api.createSubJob(projectId, form)"
+      :approve-sub-job="(id, amount) => api.approveSubJob(id, amount)"
+      :deny-sub-job="(id, reason) => api.denySubJob(id, reason)"
+      :accept-submission="(id) => api.acceptSubmission(id)"
+      :reject-submission="(id, reason) => api.rejectSubmission(id, reason)"
+      :load-activity="() => api.projectActivity(projectId)"
       :export-url="api.exportUrl(projectId)"
       @refresh="refresh"
     />

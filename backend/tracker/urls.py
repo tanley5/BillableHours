@@ -59,6 +59,53 @@ urlpatterns = [
         name="contractor-assignment-reject",
     ),
     path(
+        "contractor/assignments/<int:pk>/in-route/",
+        views.ContractorAssignmentInRouteView.as_view(),
+        name="contractor-assignment-in-route",
+    ),
+    path(
+        "projects/<int:pk>/sub-jobs/",
+        views.ProjectSubJobListCreateView.as_view(),
+        name="project-sub-jobs",
+    ),
+    path(
+        "projects/<int:pk>/activity/",
+        views.ProjectActivityView.as_view(),
+        name="project-activity",
+    ),
+    path("sub-jobs/<int:pk>/approve/", views.SubJobApproveView.as_view(), name="sub-job-approve"),
+    path("sub-jobs/<int:pk>/deny/", views.SubJobDenyView.as_view(), name="sub-job-deny"),
+    path(
+        "submissions/<int:pk>/accept/",
+        views.SubmissionAcceptView.as_view(),
+        name="submission-accept",
+    ),
+    path(
+        "submissions/<int:pk>/reject/",
+        views.SubmissionRejectView.as_view(),
+        name="submission-reject",
+    ),
+    path(
+        "contractor/assignments/<int:pk>/sub-jobs/",
+        views.ContractorSubJobListCreateView.as_view(),
+        name="contractor-sub-jobs",
+    ),
+    path(
+        "contractor/assignments/<int:pk>/sub-jobs/<int:sub_job_id>/submissions/",
+        views.ContractorSubmissionCreateView.as_view(),
+        name="contractor-submissions",
+    ),
+    path(
+        "sub-job-photos/<int:pk>/",
+        views.SubJobPhotoDownloadView.as_view(),
+        name="sub-job-photo",
+    ),
+    path(
+        "submission-photos/<int:pk>/",
+        views.SubmissionPhotoDownloadView.as_view(),
+        name="submission-photo",
+    ),
+    path(
         "contractor/assignments/<int:pk>/jobs/",
         views.ContractorJobListCreateView.as_view(),
         name="contractor-jobs",

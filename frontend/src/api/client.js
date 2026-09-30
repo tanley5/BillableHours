@@ -29,11 +29,16 @@ async function request(path, { method = 'GET', body, json = true } = {}) {
     headers['X-CSRFToken'] = csrf
   }
 
+  let payload = body
+  if (body !== undefined && json) {
+    payload = JSON.stringify(body)
+  }
+
   const response = await fetch(path, {
     method,
     credentials: 'include',
     headers,
-    body: body === undefined ? undefined : json ? JSON.stringify(body) : body,
+    body: payload === undefined ? undefined : payload,
   })
 
   if (!response.ok) {
@@ -91,6 +96,31 @@ export function createClientApi() {
       const path =
         projectId != null ? `/api/contractors/?project_id=${projectId}` : '/api/contractors/'
       return request(path)
+    },
+    listSubJobs(projectId) {
+      return request(`/api/projects/${projectId}/sub-jobs/`)
+    },
+    createSubJob(projectId, formData) {
+      return request(`/api/projects/${projectId}/sub-jobs/`, {
+        method: 'POST',
+        body: formData,
+        json: false,
+      })
+    },
+    approveSubJob(id, amount) {
+      return request(`/api/sub-jobs/${id}/approve/`, { method: 'POST', body: { amount } })
+    },
+    denySubJob(id, reason) {
+      return request(`/api/sub-jobs/${id}/deny/`, { method: 'POST', body: { reason } })
+    },
+    acceptSubmission(id) {
+      return request(`/api/submissions/${id}/accept/`, { method: 'POST', body: {} })
+    },
+    rejectSubmission(id, reason) {
+      return request(`/api/submissions/${id}/reject/`, { method: 'POST', body: { reason } })
+    },
+    projectActivity(projectId) {
+      return request(`/api/projects/${projectId}/activity/`)
     },
     createContractor(payload) {
       return request('/api/contractors/', { method: 'POST', body: payload })

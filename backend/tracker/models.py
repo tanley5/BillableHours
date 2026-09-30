@@ -53,10 +53,22 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Project(models.Model):
+    class Status(models.TextChoices):
+        CREATED = "created", "Created"
+        CONTRACTOR_ASSIGNED = "contractor_assigned", "Contractor Assigned"
+        CONTRACTOR_IN_ROUTE = "contractor_in_route", "Contractor In Route"
+        IN_PROGRESS = "in_progress", "Project In Progress"
+        READY_FOR_EVALUATION = "ready_for_evaluation", "Ready For Evaluation"
+        COMPLETE = "complete", "Project Complete and Funds Disbursed"
+
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="projects")
-    name = models.CharField(max_length=200)
-    scope = models.TextField()
+    name = models.CharField(max_length=200)  # customer_name
+    scope = models.TextField()  # description / completion criteria
+    customer_contact = models.CharField(max_length=200, blank=True, default="")
     budget = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    status = models.CharField(max_length=40, choices=Status.choices, default=Status.CREATED)
+    frozen = models.BooleanField(default=False)
+    frozen_reason = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -164,6 +176,7 @@ class Assignment(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.INVITED)
     invited_at = models.DateTimeField(default=timezone.now)
     responded_at = models.DateTimeField(null=True, blank=True)
+    in_route_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -275,3 +288,96 @@ class Photo(models.Model):
 
     def __str__(self):
         return f"{self.kind} photo for {self.job_id}"
+
+
+class SubJob(models.Model):
+    class Status(models.TextChoices):
+        PENDING_APPROVAL = "pending_approval", "Pending approval"
+        DENIED = "denied", "Denied"
+        OPEN = "open", "Open"
+        PENDING_REVIEW = "pending_review", "Pending review"
+        ACCEPTED = "accepted", "Accepted"
+
+    class CreatedBy(models.TextChoices):
+        CLIENT = "client", "Client"
+        CONTRACTOR = "contractor", "Contractor"
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="sub_jobs")
+    label = models.CharField(max_length=200)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING_APPROVAL
+    )
+    created_by = models.CharField(max_length=20, choices=CreatedBy.choices)
+    created_by_contractor = models.ForeignKey(
+        Contractor,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_sub_jobs",
+    )
+    denial_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.label} ({self.status})"
+
+    @property
+    def is_in_pipeline(self):
+        """Counts toward project completion (approved into the work pipeline)."""
+        return self.status not in (self.Status.PENDING_APPROVAL, self.Status.DENIED)
+
+
+class SubJobPhoto(models.Model):
+    sub_job = models.ForeignKey(SubJob, on_delete=models.CASCADE, related_name="before_photos")
+    file = models.ImageField(upload_to="subjobs/%Y/%m/%d/")
+    captured_at = models.DateTimeField(default=timezone.now)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+
+class Submission(models.Model):
+    class ReviewStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+
+    sub_job = models.ForeignKey(SubJob, on_delete=models.CASCADE, related_name="submissions")
+    contractor = models.ForeignKey(Contractor, on_delete=models.CASCADE, related_name="submissions")
+    hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    notes = models.TextField(blank=True, default="")
+    review_status = models.CharField(
+        max_length=20, choices=ReviewStatus.choices, default=ReviewStatus.PENDING
+    )
+    reviewed_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_submissions",
+    )
+    review_reason = models.TextField(blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"Submission {self.pk} ({self.review_status})"
+
+
+class SubmissionPhoto(models.Model):
+    class Kind(models.TextChoices):
+        AFTER = "after", "After"
+        EVIDENCE = "evidence", "Evidence"
+
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="photos")
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.AFTER)
+    file = models.ImageField(upload_to="submissions/%Y/%m/%d/")
+    captured_at = models.DateTimeField(default=timezone.now)
+    uploaded_at = models.DateTimeField(auto_now_add=True)

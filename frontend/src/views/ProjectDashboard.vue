@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import DragAssignBoard from '../components/DragAssignBoard.vue'
+import SubJobsPanel from '../components/SubJobsPanel.vue'
 
 const props = defineProps({
   project: { type: Object, required: true },
@@ -13,6 +14,12 @@ const props = defineProps({
   onCancel: { type: Function, required: true },
   onAssign: { type: Function, required: true },
   listContractors: { type: Function, required: true },
+  createSubJob: { type: Function, required: true },
+  approveSubJob: { type: Function, required: true },
+  denySubJob: { type: Function, required: true },
+  acceptSubmission: { type: Function, required: true },
+  rejectSubmission: { type: Function, required: true },
+  loadActivity: { type: Function, required: true },
   exportUrl: { type: String, required: true },
 })
 
@@ -106,6 +113,8 @@ function onSaved() {
       <p class="eyebrow">Project</p>
       <h1>{{ project.name }}</h1>
       <p class="scope">{{ project.scope }}</p>
+      <p v-if="project.customer_contact" class="budget">Contact: {{ project.customer_contact }}</p>
+      <p class="budget">Status: {{ project.status }}<span v-if="project.frozen"> · FROZEN</span></p>
       <p v-if="project.budget" class="budget">Budget: ${{ project.budget }}</p>
     </header>
 
@@ -165,6 +174,18 @@ function onSaved() {
         @saved="onSaved"
       />
     </section>
+
+    <SubJobsPanel
+      :project-id="project.id"
+      :sub-jobs="project.sub_jobs || []"
+      :create-sub-job="createSubJob"
+      :approve-sub-job="approveSubJob"
+      :deny-sub-job="denySubJob"
+      :accept-submission="acceptSubmission"
+      :reject-submission="rejectSubmission"
+      :load-activity="loadActivity"
+      @refresh="emit('refresh')"
+    />
 
     <section>
       <h2>Jobs</h2>

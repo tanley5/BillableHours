@@ -16,6 +16,10 @@ from .models import (
     Visit,
     Job,
     Photo,
+    SubJob,
+    SubJobPhoto,
+    Submission,
+    SubmissionPhoto,
 )
 from . import notify as notifications
 from .services import validate_parent_job
@@ -80,16 +84,28 @@ class SetPasswordSerializer(serializers.Serializer):
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
-        fields = ["id", "name", "scope", "budget", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "name",
+            "scope",
+            "customer_contact",
+            "budget",
+            "status",
+            "frozen",
+            "frozen_reason",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "status", "frozen", "frozen_reason", "created_at", "updated_at"]
 
 
 class ProjectDetailSerializer(ProjectSerializer):
     totals = serializers.SerializerMethodField()
     assignments = serializers.SerializerMethodField()
+    sub_jobs = serializers.SerializerMethodField()
 
     class Meta(ProjectSerializer.Meta):
-        fields = ProjectSerializer.Meta.fields + ["totals", "assignments"]
+        fields = ProjectSerializer.Meta.fields + ["totals", "assignments", "sub_jobs"]
 
     def get_totals(self, obj):
         from .services import project_totals
@@ -99,6 +115,10 @@ class ProjectDetailSerializer(ProjectSerializer):
 
     def get_assignments(self, obj):
         return AssignmentSerializer(obj.assignments.select_related("contractor"), many=True).data
+
+    def get_sub_jobs(self, obj):
+        qs = obj.sub_jobs.prefetch_related("before_photos", "submissions__photos").order_by("created_at")
+        return SubJobSerializer(qs, many=True, context=self.context).data
 
 
 class ContractorSerializer(serializers.ModelSerializer):
@@ -225,6 +245,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "status",
             "invited_at",
             "responded_at",
+            "in_route_at",
             "created_at",
             "project",
         ]
@@ -461,3 +482,86 @@ class ResubmitVisitSerializer(serializers.Serializer):
         required=False,
     )
     notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class SubJobPhotoSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubJobPhoto
+        fields = ["id", "url", "captured_at", "uploaded_at"]
+        read_only_fields = fields
+
+    def get_url(self, obj):
+        request = self.context.get("request")
+        path = f"/api/sub-job-photos/{obj.id}/"
+        if request:
+            return request.build_absolute_uri(path)
+        return path
+
+
+class SubmissionPhotoSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubmissionPhoto
+        fields = ["id", "kind", "url", "captured_at", "uploaded_at"]
+        read_only_fields = fields
+
+    def get_url(self, obj):
+        request = self.context.get("request")
+        path = f"/api/submission-photos/{obj.id}/"
+        if request:
+            return request.build_absolute_uri(path)
+        return path
+
+
+class SubmissionSerializer(serializers.ModelSerializer):
+    photos = SubmissionPhotoSerializer(many=True, read_only=True)
+    after_photos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "sub_job",
+            "contractor",
+            "hours",
+            "notes",
+            "review_status",
+            "reviewed_by",
+            "review_reason",
+            "reviewed_at",
+            "photos",
+            "after_photos",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_after_photos(self, obj):
+        photos = [p for p in obj.photos.all() if p.kind == SubmissionPhoto.Kind.AFTER]
+        return SubmissionPhotoSerializer(photos, many=True, context=self.context).data
+
+
+class SubJobSerializer(serializers.ModelSerializer):
+    before_photos = SubJobPhotoSerializer(many=True, read_only=True)
+    submissions = SubmissionSerializer(many=True, read_only=True)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True, required=False)
+
+    class Meta:
+        model = SubJob
+        fields = [
+            "id",
+            "project",
+            "label",
+            "amount",
+            "status",
+            "created_by",
+            "created_by_contractor",
+            "denial_reason",
+            "before_photos",
+            "submissions",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

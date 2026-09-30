@@ -8,6 +8,10 @@ from .models import (
     PasswordInvite,
     Photo,
     Project,
+    SubJob,
+    SubJobPhoto,
+    Submission,
+    SubmissionPhoto,
     User,
     Visit,
 )
@@ -21,3 +25,7 @@ admin.site.register(Assignment)
 admin.site.register(Visit)
 admin.site.register(Job)
 admin.site.register(Photo)
+admin.site.register(SubJob)
+admin.site.register(SubJobPhoto)
+admin.site.register(Submission)
+admin.site.register(SubmissionPhoto)

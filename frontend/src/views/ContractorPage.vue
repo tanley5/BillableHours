@@ -78,6 +78,7 @@ async function reject() {
         v-else-if="summary.assignment?.status === 'accepted'"
         :summary="summary"
         :assignment-id="assignmentId"
+        @refresh="load"
       />
       <p v-else class="muted">This assignment is {{ summary.assignment?.status }}.</p>
     </template>

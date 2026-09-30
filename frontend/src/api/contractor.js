@@ -70,6 +70,22 @@ export function createContractorApi(assignmentId) {
     reject() {
       return request(`${base}/reject/`, { method: 'POST', body: {} })
     },
+    confirmInRoute() {
+      return request(`${base}/in-route/`, { method: 'POST', body: {} })
+    },
+    listSubJobs() {
+      return request(`${base}/sub-jobs/`)
+    },
+    createSubJob(formData) {
+      return request(`${base}/sub-jobs/`, { method: 'POST', body: formData, json: false })
+    },
+    createSubmission(subJobId, formData) {
+      return request(`${base}/sub-jobs/${subJobId}/submissions/`, {
+        method: 'POST',
+        body: formData,
+        json: false,
+      })
+    },
     startConnect() {
       return request('/api/contractor/connect/onboard/', { method: 'POST', body: {} })
     },

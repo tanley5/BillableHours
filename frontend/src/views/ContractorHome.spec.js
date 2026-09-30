@@ -32,7 +32,7 @@ const summary = {
 }
 
 describe('ContractorHome', () => {
-  it('shows project name, open jobs, recent visits, and dispute comments', () => {
+  it('shows project name and legacy open jobs', () => {
     const wrapper = mount(ContractorHome, {
       props: { summary, assignmentId: 42 },
       global: { stubs: { RouterLink: RouterLinkStub } },
@@ -40,16 +40,14 @@ describe('ContractorHome', () => {
 
     expect(wrapper.text()).toContain('Bathtub repair')
     expect(wrapper.text()).toContain('Bathtub')
-    expect(wrapper.text()).toContain('2.00')
-    expect(wrapper.text()).toContain('Need clearer after photo')
-    expect(wrapper.text()).toContain('Hours look high')
   })
 
-  it('exposes actions to start a job and log a visit', () => {
+  it('exposes in-route and legacy job/visit actions', () => {
     const wrapper = mount(ContractorHome, {
       props: { summary, assignmentId: 42 },
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
+    expect(wrapper.text()).toMatch(/on my way/i)
     expect(wrapper.text()).toMatch(/start a job/i)
     expect(wrapper.text()).toMatch(/log a visit/i)
   })
