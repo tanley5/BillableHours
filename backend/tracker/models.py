@@ -381,3 +381,38 @@ class SubmissionPhoto(models.Model):
     file = models.ImageField(upload_to="submissions/%Y/%m/%d/")
     captured_at = models.DateTimeField(default=timezone.now)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+
+class Escrow(models.Model):
+    """One manual-capture PaymentIntent per SubJob (SPEC2 phase 4)."""
+
+    class Status(models.TextChoices):
+        REQUIRES_CONFIRMATION = "requires_confirmation", "Requires confirmation"
+        REQUIRES_CAPTURE = "requires_capture", "Authorized (requires capture)"
+        CAPTURED = "captured", "Captured"
+        CANCELED = "canceled", "Canceled"
+        EXPIRED = "expired", "Expired"
+        DETACHED = "detached", "Detached"
+
+    sub_job = models.OneToOneField(SubJob, on_delete=models.CASCADE, related_name="escrow")
+    destination_contractor = models.ForeignKey(
+        Contractor,
+        on_delete=models.PROTECT,
+        related_name="escrows",
+    )
+    stripe_payment_intent_id = models.CharField(max_length=255, unique=True)
+    client_secret = models.CharField(max_length=255, blank=True, default="")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    platform_fee_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    capture_method = models.CharField(max_length=20, default="manual")
+    status = models.CharField(max_length=32, choices=Status.choices)
+    authorized_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+    expired_at = models.DateTimeField(null=True, blank=True)
+    detached_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Escrow {self.stripe_payment_intent_id} ({self.status})"

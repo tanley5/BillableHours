@@ -547,6 +547,7 @@ class SubJobSerializer(serializers.ModelSerializer):
     before_photos = SubJobPhotoSerializer(many=True, read_only=True)
     submissions = SubmissionSerializer(many=True, read_only=True)
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True, required=False)
+    escrow = serializers.SerializerMethodField()
 
     class Meta:
         model = SubJob
@@ -561,7 +562,27 @@ class SubJobSerializer(serializers.ModelSerializer):
             "denial_reason",
             "before_photos",
             "submissions",
+            "escrow",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_escrow(self, obj):
+        from .models import Escrow
+
+        try:
+            escrow = obj.escrow
+        except Escrow.DoesNotExist:
+            return None
+        return {
+            "id": escrow.id,
+            "status": escrow.status,
+            "amount": str(escrow.amount),
+            "platform_fee_amount": str(escrow.platform_fee_amount),
+            "stripe_payment_intent_id": escrow.stripe_payment_intent_id,
+            "client_secret": escrow.client_secret,
+            "expires_at": escrow.expires_at.isoformat() if escrow.expires_at else None,
+            "captured_at": escrow.captured_at.isoformat() if escrow.captured_at else None,
+            "destination_contractor_id": escrow.destination_contractor_id,
+        }

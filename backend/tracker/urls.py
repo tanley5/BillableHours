@@ -76,6 +76,16 @@ urlpatterns = [
     path("sub-jobs/<int:pk>/approve/", views.SubJobApproveView.as_view(), name="sub-job-approve"),
     path("sub-jobs/<int:pk>/deny/", views.SubJobDenyView.as_view(), name="sub-job-deny"),
     path(
+        "sub-jobs/<int:pk>/escrow/reauthorize/",
+        views.SubJobEscrowReauthorizeView.as_view(),
+        name="sub-job-escrow-reauthorize",
+    ),
+    path(
+        "sub-jobs/<int:pk>/escrow/detach/",
+        views.SubJobEscrowDetachView.as_view(),
+        name="sub-job-escrow-detach",
+    ),
+    path(
         "submissions/<int:pk>/accept/",
         views.SubmissionAcceptView.as_view(),
         name="submission-accept",

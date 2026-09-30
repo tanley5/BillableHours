@@ -4,6 +4,7 @@ from .models import (
     Assignment,
     ClientContractor,
     Contractor,
+    Escrow,
     Job,
     PasswordInvite,
     Photo,
@@ -29,3 +30,4 @@ admin.site.register(SubJob)
 admin.site.register(SubJobPhoto)
 admin.site.register(Submission)
 admin.site.register(SubmissionPhoto)
+admin.site.register(Escrow)

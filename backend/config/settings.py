@@ -145,3 +145,4 @@ STRIPE_CONNECT_RETURN_URL = os.environ.get(
 STRIPE_CONNECT_REFRESH_URL = os.environ.get(
     "STRIPE_CONNECT_REFRESH_URL", f"{APP_ORIGIN}/contractor/connect/refresh"
 )
+ESCROW_HOLD_DAYS = int(os.environ.get("ESCROW_HOLD_DAYS", "7"))

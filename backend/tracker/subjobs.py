@@ -1,4 +1,4 @@
-"""SubJob / Submission / project status machine (SPEC2 phase 3). Escrow capture is phase 4."""
+"""SubJob / Submission / project status machine (SPEC2 phase 3–4)."""
 from __future__ import annotations
 
 from decimal import Decimal
@@ -7,7 +7,8 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from .models import Assignment, Project, SubJob, Submission, SubJobPhoto, SubmissionPhoto
+from . import stripe_escrow
+from .models import Assignment, Escrow, Project, SubJob, Submission, SubJobPhoto, SubmissionPhoto
 
 
 def assert_project_writable(project: Project):
@@ -71,6 +72,7 @@ def create_client_subjob(*, project: Project, label: str, amount: Decimal, befor
         created_by=SubJob.CreatedBy.CLIENT,
     )
     SubJobPhoto.objects.create(sub_job=sub, file=before_file)
+    stripe_escrow.create_escrow_for_subjob(sub, amount=amount)
     recompute_project_status(project)
     return sub
 
@@ -104,7 +106,7 @@ def approve_and_fund_subjob(sub_job: SubJob, *, amount: Decimal) -> SubJob:
     locked.amount = amount
     locked.status = SubJob.Status.OPEN
     locked.save(update_fields=["amount", "status", "updated_at"])
-    # Escrow PaymentIntent is phase 4 — amount is recorded now.
+    stripe_escrow.create_escrow_for_subjob(locked, amount=amount)
     recompute_project_status(locked.project)
     return locked
 
@@ -132,6 +134,15 @@ def create_submission(*, sub_job: SubJob, contractor, hours: Decimal, notes: str
         raise DRFValidationError({"after_photo": "An after photo is required."})
     if hours is None or hours <= 0:
         raise DRFValidationError({"hours": "Hours must be greater than zero."})
+    try:
+        escrow = locked.escrow
+    except Escrow.DoesNotExist:
+        escrow = None
+    if escrow is not None and escrow.status not in (
+        Escrow.Status.REQUIRES_CAPTURE,
+        Escrow.Status.CAPTURED,
+    ):
+        raise DRFValidationError({"detail": "Escrow must be authorized before submitting work."})
     submission = Submission.objects.create(
         sub_job=locked,
         contractor=contractor,
@@ -165,7 +176,13 @@ def accept_submission(submission: Submission, *, reviewer) -> Submission:
 
     sub.status = SubJob.Status.ACCEPTED
     sub.save(update_fields=["status", "updated_at"])
-    # Escrow capture is phase 4
+
+    try:
+        escrow = Escrow.objects.select_for_update().get(sub_job=sub)
+        stripe_escrow.capture_escrow(escrow)
+    except Escrow.DoesNotExist as exc:
+        raise DRFValidationError({"detail": "Cannot accept submission without an authorized escrow."}) from exc
+
     recompute_project_status(sub.project)
     return locked
 
@@ -186,7 +203,6 @@ def reject_submission(submission: Submission, *, reviewer, reason: str) -> Submi
     locked.reviewed_at = timezone.now()
     locked.save(update_fields=["review_status", "reviewed_by", "review_reason", "reviewed_at"])
 
-    # Re-open for resubmission; rejected record stays
     sub.status = SubJob.Status.OPEN
     sub.save(update_fields=["status", "updated_at"])
     recompute_project_status(sub.project)
@@ -289,6 +305,56 @@ def project_activity_feed(project: Project) -> list[dict]:
                     "detail": {"sub_job_id": sj.id, "amount": str(sj.amount) if sj.amount else None},
                 }
             )
+
+        try:
+            escrow = sj.escrow
+        except Escrow.DoesNotExist:
+            escrow = None
+        if escrow is not None:
+            if escrow.authorized_at:
+                events.append(
+                    {
+                        "type": "escrow.authorized",
+                        "timestamp": escrow.authorized_at.isoformat(),
+                        "actor": "client",
+                        "detail": {
+                            "sub_job_id": sj.id,
+                            "amount": str(escrow.amount),
+                            "fee": str(escrow.platform_fee_amount),
+                        },
+                    }
+                )
+            if escrow.captured_at:
+                events.append(
+                    {
+                        "type": "escrow.captured",
+                        "timestamp": escrow.captured_at.isoformat(),
+                        "actor": "system",
+                        "detail": {
+                            "sub_job_id": sj.id,
+                            "amount": str(escrow.amount),
+                            "payment_intent": escrow.stripe_payment_intent_id,
+                        },
+                    }
+                )
+            if escrow.expired_at:
+                events.append(
+                    {
+                        "type": "escrow.expired",
+                        "timestamp": escrow.expired_at.isoformat(),
+                        "actor": "system",
+                        "detail": {"sub_job_id": sj.id},
+                    }
+                )
+            elif escrow.detached_at and escrow.status == Escrow.Status.DETACHED:
+                events.append(
+                    {
+                        "type": "escrow.detached",
+                        "timestamp": escrow.detached_at.isoformat(),
+                        "actor": "client",
+                        "detail": {"sub_job_id": sj.id},
+                    }
+                )
 
     for sub in Submission.objects.filter(sub_job__project=project).select_related(
         "contractor", "reviewed_by", "sub_job"

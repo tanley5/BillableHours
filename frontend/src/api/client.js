@@ -113,6 +113,12 @@ export function createClientApi() {
     denySubJob(id, reason) {
       return request(`/api/sub-jobs/${id}/deny/`, { method: 'POST', body: { reason } })
     },
+    reauthorizeEscrow(id) {
+      return request(`/api/sub-jobs/${id}/escrow/reauthorize/`, { method: 'POST', body: {} })
+    },
+    detachEscrow(id) {
+      return request(`/api/sub-jobs/${id}/escrow/detach/`, { method: 'POST', body: {} })
+    },
     acceptSubmission(id) {
       return request(`/api/submissions/${id}/accept/`, { method: 'POST', body: {} })
     },

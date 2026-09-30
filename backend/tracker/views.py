@@ -699,6 +699,17 @@ class StripeWebhookView(APIView):
             if not isinstance(account, dict):
                 account = account.to_dict() if hasattr(account, "to_dict") else dict(account)
             stripe_connect.apply_account_updated(account)
+        elif event.type in (
+            "payment_intent.canceled",
+            "payment_intent.amount_capturable_updated",
+            "payment_intent.succeeded",
+        ):
+            from . import stripe_escrow
+
+            pi = event.data.object
+            if not isinstance(pi, dict):
+                pi = pi.to_dict() if hasattr(pi, "to_dict") else dict(pi)
+            stripe_escrow.apply_payment_intent_event(pi)
 
         return Response({"received": True})
 
@@ -779,6 +790,32 @@ class SubJobDenyView(APIView):
 
         sub = get_object_or_404(SubJob, pk=pk, project__owner=request.user)
         sub = deny_subjob(sub, reason=request.data.get("reason", ""))
+        return Response(SubJobSerializer(sub, context={"request": request}).data)
+
+
+class SubJobEscrowReauthorizeView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def post(self, request, pk):
+        from . import stripe_escrow
+
+        sub = get_object_or_404(SubJob, pk=pk, project__owner=request.user)
+        stripe_escrow.reauthorize_escrow(sub)
+        sub.refresh_from_db()
+        return Response(SubJobSerializer(sub, context={"request": request}).data)
+
+
+class SubJobEscrowDetachView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def post(self, request, pk):
+        from . import stripe_escrow
+        from .models import Escrow
+
+        sub = get_object_or_404(SubJob, pk=pk, project__owner=request.user)
+        escrow = get_object_or_404(Escrow, sub_job=sub)
+        escrow = stripe_escrow.detach_escrow(escrow)
+        sub.refresh_from_db()
         return Response(SubJobSerializer(sub, context={"request": request}).data)
 
 

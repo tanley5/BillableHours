@@ -82,6 +82,8 @@ function mountDashboard(overrides = {}) {
       denySubJob: vi.fn().mockResolvedValue({}),
       acceptSubmission: vi.fn().mockResolvedValue({}),
       rejectSubmission: vi.fn().mockResolvedValue({}),
+      reauthorizeEscrow: vi.fn().mockResolvedValue({}),
+      detachEscrow: vi.fn().mockResolvedValue({}),
       loadActivity: vi.fn().mockResolvedValue([]),
       exportUrl: '/api/projects/3/export.csv',
       ...overrides,

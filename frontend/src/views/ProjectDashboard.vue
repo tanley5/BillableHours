@@ -19,6 +19,8 @@ const props = defineProps({
   denySubJob: { type: Function, required: true },
   acceptSubmission: { type: Function, required: true },
   rejectSubmission: { type: Function, required: true },
+  reauthorizeEscrow: { type: Function, required: true },
+  detachEscrow: { type: Function, required: true },
   loadActivity: { type: Function, required: true },
   exportUrl: { type: String, required: true },
 })
@@ -177,12 +179,16 @@ function onSaved() {
 
     <SubJobsPanel
       :project-id="project.id"
+      :project-frozen="!!project.frozen"
+      :frozen-reason="project.frozen_reason || ''"
       :sub-jobs="project.sub_jobs || []"
       :create-sub-job="createSubJob"
       :approve-sub-job="approveSubJob"
       :deny-sub-job="denySubJob"
       :accept-submission="acceptSubmission"
       :reject-submission="rejectSubmission"
+      :reauthorize-escrow="reauthorizeEscrow"
+      :detach-escrow="detachEscrow"
       :load-activity="loadActivity"
       @refresh="emit('refresh')"
     />

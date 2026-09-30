@@ -73,6 +73,8 @@ async function refresh() {
       :deny-sub-job="(id, reason) => api.denySubJob(id, reason)"
       :accept-submission="(id) => api.acceptSubmission(id)"
       :reject-submission="(id, reason) => api.rejectSubmission(id, reason)"
+      :reauthorize-escrow="(id) => api.reauthorizeEscrow(id)"
+      :detach-escrow="(id) => api.detachEscrow(id)"
       :load-activity="() => api.projectActivity(projectId)"
       :export-url="api.exportUrl(projectId)"
       @refresh="refresh"
