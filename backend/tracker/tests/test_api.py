@@ -8,7 +8,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from tracker.models import Assignment, Job, Project, User, Visit
+from tracker.models import Assignment, ClientContractor, Contractor, Job, Project, User, Visit
 from tracker import services
 
 
@@ -18,6 +18,27 @@ def make_image_file(name="shot.jpg", size=(200, 150), color="blue"):
     return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
 
 
+def make_contractor(
+    *,
+    email="alex@example.com",
+    password="contractor-pass",
+    name="Alex Contractor",
+    phone="555-0100",
+    connect_status=Contractor.ConnectStatus.COMPLETE,
+    stripe_id="acct_alex",
+):
+    user = User.objects.create_user(email=email, password=password, role=User.Role.CONTRACTOR)
+    return Contractor.objects.create(
+        user=user,
+        name=name,
+        email=email,
+        phone=phone,
+        connect_status=connect_status,
+        stripe_connect_account_id=stripe_id,
+    )
+
+
+@override_settings(N8N_WEBHOOK_URL="")
 class TrackerAPITestCase(TestCase):
     def setUp(self):
         self.client_user = User.objects.create_user(
@@ -33,22 +54,25 @@ class TrackerAPITestCase(TestCase):
             scope="Fix bathtub and related damage",
             budget=Decimal("2500.00"),
         )
+        self.contractor = make_contractor()
+        ClientContractor.objects.create(client=self.client_user, contractor=self.contractor)
         assign_resp = self.api.post(
             f"/api/projects/{self.project.id}/assignments/",
-            {
-                "name": "Alex Contractor",
-                "phone": "555-0100",
-                "hourly_rate": "75.00",
-            },
+            {"contractor_id": self.contractor.id, "hourly_rate": "75.00"},
             format="json",
         )
         self.assertEqual(assign_resp.status_code, status.HTTP_201_CREATED)
         self.assignment = Assignment.objects.get(pk=assign_resp.data["id"])
-        self.token = self.assignment.token
+        # Contractor accepts invite so jobs/visits work
         self.c_api = APIClient()
+        self.c_api.force_authenticate(user=self.contractor.user)
+        accept = self.c_api.post(f"/api/contractor/assignments/{self.assignment.id}/accept/")
+        self.assertEqual(accept.status_code, status.HTTP_200_OK)
+        self.assignment.refresh_from_db()
 
     def c_url(self, path=""):
-        return f"/api/c/{self.token}/{path.lstrip('/')}" if path else f"/api/c/{self.token}/"
+        base = f"/api/contractor/assignments/{self.assignment.id}/"
+        return f"{base}{path.lstrip('/')}" if path else base
 
 
 class AuthAndScopingTests(TrackerAPITestCase):
@@ -64,34 +88,42 @@ class AuthAndScopingTests(TrackerAPITestCase):
         self.assertEqual(me.status_code, status.HTTP_200_OK)
         self.assertEqual(me.data["email"], "owner@example.com")
 
-    def test_token_scoped_to_assignment(self):
+    def test_session_scoped_to_assignment(self):
         other = Project.objects.create(owner=self.client_user, name="Other", scope="x")
+        other_contractor = make_contractor(
+            email="o@ex.com", name="Other Guy", stripe_id="acct_other"
+        )
+        ClientContractor.objects.create(client=self.client_user, contractor=other_contractor)
         other_assign = self.api.post(
             f"/api/projects/{other.id}/assignments/",
-            {"name": "Other Guy", "email": "o@ex.com", "hourly_rate": "50"},
+            {"contractor_id": other_contractor.id, "hourly_rate": "50"},
             format="json",
         ).data
+        other_c = APIClient()
+        other_c.force_authenticate(user=other_contractor.user)
+        other_c.post(f"/api/contractor/assignments/{other_assign['id']}/accept/")
 
         job = self.c_api.post(self.c_url("jobs/"), {"label": "Bathtub"}, format="json")
         self.assertEqual(job.status_code, status.HTTP_201_CREATED)
 
-        other_client = APIClient()
-        detail = other_client.patch(
-            f"/api/c/{other_assign['token']}/jobs/{job.data['id']}/",
+        detail = other_c.patch(
+            f"/api/contractor/assignments/{other_assign['id']}/jobs/{job.data['id']}/",
             {"label": "Hacked"},
             format="json",
         )
         self.assertEqual(detail.status_code, status.HTTP_404_NOT_FOUND)
 
-        summary = other_client.get(f"/api/c/{other_assign['token']}/")
+        summary = other_c.get(f"/api/contractor/assignments/{other_assign['id']}/")
         self.assertEqual(summary.status_code, status.HTTP_200_OK)
         self.assertEqual(summary.data["project"]["name"], "Other")
         self.assertEqual(len(summary.data["open_jobs"]), 0)
 
     def test_contractor_summary_hides_budget_and_other_contractors(self):
+        second = make_contractor(email="s@ex.com", name="Second", stripe_id="acct_second")
+        ClientContractor.objects.create(client=self.client_user, contractor=second)
         self.api.post(
             f"/api/projects/{self.project.id}/assignments/",
-            {"name": "Second", "email": "s@ex.com", "hourly_rate": "90"},
+            {"contractor_id": second.id, "hourly_rate": "90"},
             format="json",
         )
         summary = self.c_api.get(self.c_url())
@@ -102,11 +134,22 @@ class AuthAndScopingTests(TrackerAPITestCase):
         self.assertNotIn("Second", body)
         self.assertNotIn("2500", body)
 
-    def test_revoked_token_returns_403(self):
-        revoke = self.api.post(f"/api/assignments/{self.assignment.id}/revoke/")
-        self.assertEqual(revoke.status_code, status.HTTP_200_OK)
-        resp = self.c_api.get(self.c_url())
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+    def test_cancelled_assignment_blocks_work(self):
+        # Create a fresh invited assignment and cancel it
+        other_proj = Project.objects.create(owner=self.client_user, name="Cancel me", scope="x")
+        create = self.api.post(
+            f"/api/projects/{other_proj.id}/assignments/",
+            {"contractor_id": self.contractor.id, "hourly_rate": "75"},
+            format="json",
+        )
+        cancel = self.api.post(f"/api/assignments/{create.data['id']}/cancel/")
+        self.assertEqual(cancel.status_code, status.HTTP_200_OK)
+        resp = self.c_api.post(
+            f"/api/contractor/assignments/{create.data['id']}/jobs/",
+            {"label": "Nope"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class VisitRulesTests(TrackerAPITestCase):
@@ -314,8 +357,8 @@ class ProjectRollupTests(TrackerAPITestCase):
 @override_settings(
     CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 )
-class InvalidTokenTests(TestCase):
-    def test_bogus_token_rejected(self):
+class GoneTokenRoutesTests(TestCase):
+    def test_token_routes_return_404(self):
         api = APIClient()
         resp = api.get("/api/c/not-a-real-token/")
-        self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)

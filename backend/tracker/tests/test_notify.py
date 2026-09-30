@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from tracker.models import Assignment, Job, Project, User, Visit
+from tracker.models import Assignment, ClientContractor, Contractor, Job, Project, User, Visit
 from tracker.notify import EVENT_FOUND_ISSUE, EVENT_JOB_CREATED, EVENT_RESUBMIT, EVENT_VISIT_CREATED, notify
 
 
@@ -41,7 +41,6 @@ class NotifyServiceTests(TestCase):
     @override_settings(N8N_WEBHOOK_URL="http://n8n:5678/webhook/billable-events")
     def test_swallows_delivery_errors(self):
         with patch("tracker.notify.urlopen", side_effect=OSError("n8n down")):
-            # Must not raise — contractor/client requests still succeed
             notify(EVENT_JOB_CREATED, {"id": 1})
 
 
@@ -60,17 +59,31 @@ class NotifyIntegrationTests(TestCase):
             name="Bathtub repair",
             scope="Fix bathtub",
         )
+        c_user = User.objects.create_user(
+            email="alex@example.com", password="contractor-pass", role=User.Role.CONTRACTOR
+        )
+        self.contractor = Contractor.objects.create(
+            user=c_user,
+            name="Alex",
+            phone="555",
+            email="alex@example.com",
+            connect_status=Contractor.ConnectStatus.COMPLETE,
+            stripe_connect_account_id="acct_alex",
+        )
+        ClientContractor.objects.create(client=self.client_user, contractor=self.contractor)
         assign = self.api.post(
             f"/api/projects/{self.project.id}/assignments/",
-            {"name": "Alex", "phone": "555", "hourly_rate": "75"},
+            {"contractor_id": self.contractor.id, "hourly_rate": "75"},
             format="json",
         )
         self.assignment = Assignment.objects.get(pk=assign.data["id"])
-        self.token = self.assignment.token
         self.c_api = APIClient()
+        self.c_api.force_authenticate(user=c_user)
+        self.c_api.post(f"/api/contractor/assignments/{self.assignment.id}/accept/")
 
     def c_url(self, path=""):
-        return f"/api/c/{self.token}/{path.lstrip('/')}" if path else f"/api/c/{self.token}/"
+        base = f"/api/contractor/assignments/{self.assignment.id}/"
+        return f"{base}{path.lstrip('/')}" if path else base
 
     @patch("tracker.notify.urlopen")
     def test_creating_job_notifies_job_created(self, urlopen):
@@ -141,12 +154,25 @@ class ExportCsvPhase4Tests(TestCase):
         self.api = APIClient()
         self.api.force_authenticate(user=self.user)
         self.project = Project.objects.create(owner=self.user, name="Export me", scope="s")
+        c_user = User.objects.create_user(
+            email="a@ex.com", password="pass", role=User.Role.CONTRACTOR
+        )
+        contractor = Contractor.objects.create(
+            user=c_user,
+            name="Alex",
+            email="a@ex.com",
+            connect_status=Contractor.ConnectStatus.COMPLETE,
+            stripe_connect_account_id="acct_export",
+        )
+        ClientContractor.objects.create(client=self.user, contractor=contractor)
         assign = self.api.post(
             f"/api/projects/{self.project.id}/assignments/",
-            {"name": "Alex", "email": "a@ex.com", "hourly_rate": "50"},
+            {"contractor_id": contractor.id, "hourly_rate": "50"},
             format="json",
         ).data
         self.assignment = Assignment.objects.get(pk=assign["id"])
+        self.assignment.status = Assignment.Status.ACCEPTED
+        self.assignment.save(update_fields=["status"])
 
     def test_export_includes_header_and_approved_rows_only(self):
         Visit.objects.create(

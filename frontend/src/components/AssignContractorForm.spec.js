@@ -3,26 +3,32 @@ import { mount, flushPromises } from '@vue/test-utils'
 import AssignContractorForm from '../components/AssignContractorForm.vue'
 
 describe('AssignContractorForm', () => {
-  it('assigns a contractor and emits the created assignment with link', async () => {
+  it('assigns a pool contractor and emits the created assignment', async () => {
     const assign = vi.fn().mockResolvedValue({
       id: 1,
-      link: 'http://localhost/c/tok',
+      status: 'invited',
       contractor: { name: 'Alex' },
     })
-    const wrapper = mount(AssignContractorForm, { props: { assign } })
+    const listContractors = vi.fn().mockResolvedValue([
+      {
+        id: 7,
+        name: 'Alex',
+        email: 'alex@example.com',
+        connect_status: 'complete',
+      },
+    ])
+    const wrapper = mount(AssignContractorForm, { props: { assign, listContractors } })
+    await flushPromises()
 
-    await wrapper.get('input[name="name"]').setValue('Alex')
-    await wrapper.get('input[name="phone"]').setValue('555-0100')
+    await wrapper.get('select[name="contractor_id"]').setValue('7')
     await wrapper.get('input[name="hourly_rate"]').setValue('75')
     await wrapper.get('form').trigger('submit.prevent')
     await flushPromises()
 
     expect(assign).toHaveBeenCalledWith({
-      name: 'Alex',
-      phone: '555-0100',
-      email: '',
+      contractor_id: 7,
       hourly_rate: '75',
     })
-    expect(wrapper.emitted('assigned')[0][0].link).toContain('/c/tok')
+    expect(wrapper.emitted('assigned')[0][0].status).toBe('invited')
   })
 })

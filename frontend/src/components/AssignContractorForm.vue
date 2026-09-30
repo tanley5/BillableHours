@@ -1,36 +1,40 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 const props = defineProps({
   assign: { type: Function, required: true },
+  listContractors: { type: Function, required: true },
 })
 const emit = defineEmits(['assigned'])
 
-const name = ref('')
-const phone = ref('')
-const email = ref('')
+const contractors = ref([])
+const contractorId = ref('')
 const hourlyRate = ref('')
 const error = ref('')
 const busy = ref(false)
 
+onMounted(async () => {
+  try {
+    contractors.value = await props.listContractors()
+  } catch (err) {
+    error.value = err.message || 'Could not load contractors.'
+  }
+})
+
 async function onSubmit() {
   error.value = ''
-  if (!phone.value && !email.value) {
-    error.value = 'Provide a phone or email.'
+  if (!contractorId.value) {
+    error.value = 'Select a contractor from your pool.'
     return
   }
   busy.value = true
   try {
     const assignment = await props.assign({
-      name: name.value.trim(),
-      phone: phone.value.trim(),
-      email: email.value.trim(),
+      contractor_id: Number(contractorId.value),
       hourly_rate: String(hourlyRate.value),
     })
     emit('assigned', assignment)
-    name.value = ''
-    phone.value = ''
-    email.value = ''
+    contractorId.value = ''
     hourlyRate.value = ''
   } catch (err) {
     error.value = err.message || 'Could not assign contractor.'
@@ -38,36 +42,40 @@ async function onSubmit() {
     busy.value = false
   }
 }
+
+function labelFor(c) {
+  const connect = c.connect_status === 'complete' ? 'Connect ready' : `Connect: ${c.connect_status}`
+  return `${c.name} (${connect})`
+}
 </script>
 
 <template>
   <form class="form" @submit.prevent="onSubmit">
     <h3>Assign contractor</h3>
+    <p class="hint">Only contractors with completed Connect can be assigned.</p>
     <label>
-      Name
-      <input name="name" v-model="name" required />
-    </label>
-    <label>
-      Phone
-      <input name="phone" v-model="phone" />
-    </label>
-    <label>
-      Email
-      <input name="email" type="email" v-model="email" />
+      Contractor
+      <select name="contractor_id" v-model="contractorId" required>
+        <option disabled value="">Select…</option>
+        <option v-for="c in contractors" :key="c.id" :value="String(c.id)">
+          {{ labelFor(c) }}
+        </option>
+      </select>
     </label>
     <label>
       Hourly rate
       <input name="hourly_rate" type="number" min="0.01" step="0.01" v-model="hourlyRate" required />
     </label>
     <p v-if="error" class="error">{{ error }}</p>
-    <button type="submit" :disabled="busy">{{ busy ? 'Assigning…' : 'Assign & get link' }}</button>
+    <button type="submit" :disabled="busy">{{ busy ? 'Assigning…' : 'Send invite' }}</button>
   </form>
 </template>
 
 <style scoped>
 .form { display: grid; gap: 0.75rem; }
+.hint { margin: 0; color: #5c6b5a; font-size: 0.9rem; }
 label { display: grid; gap: 0.3rem; font-weight: 600; font-size: 0.95rem; }
-input, button {
+input, select, button {
   font: inherit;
   padding: 0.6rem 0.7rem;
   border: 1px solid #c5d0c4;

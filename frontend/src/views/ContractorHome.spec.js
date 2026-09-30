@@ -34,7 +34,7 @@ const summary = {
 describe('ContractorHome', () => {
   it('shows project name, open jobs, recent visits, and dispute comments', () => {
     const wrapper = mount(ContractorHome, {
-      props: { summary, token: 'tok' },
+      props: { summary, assignmentId: 42 },
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
 
@@ -47,7 +47,7 @@ describe('ContractorHome', () => {
 
   it('exposes actions to start a job and log a visit', () => {
     const wrapper = mount(ContractorHome, {
-      props: { summary, token: 'tok' },
+      props: { summary, assignmentId: 42 },
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
     expect(wrapper.text()).toMatch(/start a job/i)

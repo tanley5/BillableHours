@@ -7,7 +7,7 @@ describe('createClientApi', () => {
     document.cookie = 'csrftoken=test-csrf; path=/'
   })
 
-  it('logs in and fetches the current client', async () => {
+  it('logs in and fetches the current user', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -33,7 +33,7 @@ describe('createClientApi', () => {
   it('lists projects and loads project detail, jobs, and visits', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ([]),
+      json: async () => [],
     })
     vi.stubGlobal('fetch', fetchMock)
     const api = createClientApi()
@@ -51,7 +51,7 @@ describe('createClientApi', () => {
     expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/projects/3/visits/')
   })
 
-  it('creates assignments, revokes links, approves and disputes entries', async () => {
+  it('manages contractors and assignments without token links', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ id: 1 }),
@@ -59,15 +59,20 @@ describe('createClientApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const api = createClientApi()
 
+    await api.listContractors()
+    expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/contractors/')
+
+    await api.createContractor({ name: 'Alex', email: 'a@ex.com' })
+    expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/contractors/')
+
     await api.createAssignment(3, {
-      name: 'Alex',
-      phone: '555',
+      contractor_id: 7,
       hourly_rate: '75.00',
     })
     expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/projects/3/assignments/')
 
-    await api.revokeAssignment(9)
-    expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/assignments/9/revoke/')
+    await api.cancelAssignment(9)
+    expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/assignments/9/cancel/')
 
     await api.approveJob(4)
     expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/jobs/4/approve/')

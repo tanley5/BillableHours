@@ -7,9 +7,12 @@ import { RouterLink } from 'vue-router'
     <h1>Billable Hours</h1>
     <p>Track contractor visits and photo-backed jobs for a single property project.</p>
     <div class="actions">
-      <RouterLink class="btn" to="/app/login">Client dashboard</RouterLink>
+      <RouterLink class="btn" to="/app/login">Sign in</RouterLink>
     </div>
-    <p class="hint">Contractors open the private link the client shares — no install, no account.</p>
+    <p class="hint">
+      Clients manage projects and the contractor pool. Contractors log in to accept assignments,
+      complete Connect onboarding, and log work.
+    </p>
   </main>
 </template>
 

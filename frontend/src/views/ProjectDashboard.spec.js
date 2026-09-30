@@ -17,8 +17,7 @@ const project = {
     {
       id: 9,
       hourly_rate: '75.00',
-      revoked: false,
-      link: 'http://localhost/c/tok123',
+      status: 'invited',
       contractor: { name: 'Alex', phone: '555-0100', email: '' },
     },
   ],
@@ -71,12 +70,13 @@ function mountDashboard(overrides = {}) {
       onDisputeJob: vi.fn().mockResolvedValue({}),
       onApproveVisit: vi.fn().mockResolvedValue({}),
       onDisputeVisit: vi.fn().mockResolvedValue({}),
-      onRevoke: vi.fn().mockResolvedValue({}),
+      onCancel: vi.fn().mockResolvedValue({}),
       onAssign: vi.fn().mockResolvedValue({
         id: 10,
-        link: 'http://localhost/c/new',
+        status: 'invited',
         contractor: { name: 'Blair' },
       }),
+      listContractors: vi.fn().mockResolvedValue([]),
       exportUrl: '/api/projects/3/export.csv',
       ...overrides,
     },
@@ -134,19 +134,13 @@ describe('ProjectDashboard', () => {
     expect(onApproveVisit).toHaveBeenCalledWith(20)
   })
 
-  it('offers copy link and revoke for an assignment', async () => {
-    const writeText = vi.fn().mockResolvedValue()
-    vi.stubGlobal('navigator', { clipboard: { writeText } })
-    const onRevoke = vi.fn().mockResolvedValue({ id: 9, revoked: true })
-    const wrapper = mountDashboard({ onRevoke })
+  it('cancels an invited assignment', async () => {
+    const onCancel = vi.fn().mockResolvedValue({ id: 9, status: 'cancelled' })
+    const wrapper = mountDashboard({ onCancel })
 
-    await wrapper.get('[data-test="copy-link-9"]').trigger('click')
+    await wrapper.get('[data-test="cancel-9"]').trigger('click')
     await flushPromises()
-    expect(writeText).toHaveBeenCalledWith('http://localhost/c/tok123')
-
-    await wrapper.get('[data-test="revoke-9"]').trigger('click')
-    await flushPromises()
-    expect(onRevoke).toHaveBeenCalledWith(9)
+    expect(onCancel).toHaveBeenCalledWith(9)
   })
 
   it('links to CSV export of approved entries', () => {

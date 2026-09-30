@@ -15,8 +15,8 @@ async function onSubmit() {
   error.value = ''
   busy.value = true
   try {
-    await props.login(email.value, password.value)
-    emit('success')
+    const user = await props.login(email.value, password.value)
+    emit('success', user)
   } catch (err) {
     error.value = err.message || 'Login failed.'
   } finally {
@@ -27,7 +27,7 @@ async function onSubmit() {
 
 <template>
   <form class="form" @submit.prevent="onSubmit">
-    <h1>Client login</h1>
+    <h1>Sign in</h1>
     <label>
       Email
       <input name="email" type="email" v-model="email" autocomplete="username" required />

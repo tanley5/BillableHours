@@ -23,7 +23,7 @@ class SeedScenarioCommandTests(TestCase):
         self.assertIn("bathtub", project.scope.lower())
 
         assignment = Assignment.objects.get(project=project)
-        self.assertFalse(assignment.revoked)
+        self.assertEqual(assignment.status, Assignment.Status.ACCEPTED)
         self.assertEqual(assignment.contractor.name, "Alex Contractor")
 
         bathtub = Job.objects.get(assignment=assignment, label="Bathtub", parent=None)

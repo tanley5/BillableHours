@@ -1,9 +1,23 @@
 from decimal import Decimal
 
-from django.contrib.auth import authenticate, login, logout
+from django.conf import settings
+from django.contrib.auth import authenticate, login
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Assignment, Contractor, Job, Photo, Project, User, Visit
+from .models import (
+    Assignment,
+    ClientContractor,
+    Contractor,
+    PasswordInvite,
+    Project,
+    User,
+    Visit,
+    Job,
+    Photo,
+)
+from . import notify as notifications
 from .services import validate_parent_job
 
 
@@ -19,8 +33,8 @@ class LoginSerializer(serializers.Serializer):
         )
         if user is None:
             raise serializers.ValidationError("Invalid email or password.")
-        if getattr(user, "role", None) != User.Role.CLIENT:
-            raise serializers.ValidationError("Only clients may log in.")
+        if getattr(user, "role", None) not in (User.Role.CLIENT, User.Role.CONTRACTOR):
+            raise serializers.ValidationError("Invalid email or password.")
         attrs["user"] = user
         return attrs
 
@@ -28,6 +42,39 @@ class LoginSerializer(serializers.Serializer):
         request = self.context["request"]
         login(request, validated_data["user"])
         return validated_data["user"]
+
+
+class SetPasswordSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(min_length=8, write_only=True)
+
+    def validate(self, attrs):
+        raw = attrs["token"]
+        from .models import hash_invite_token
+
+        invite = (
+            PasswordInvite.objects.select_related("user")
+            .filter(token_hash=hash_invite_token(raw), used_at__isnull=True)
+            .order_by("-created_at")
+            .first()
+        )
+        if invite is None or not invite.is_valid(raw):
+            raise serializers.ValidationError({"token": "Invalid or expired invite token."})
+        attrs["invite"] = invite
+        return attrs
+
+    def save(self, **kwargs):
+        invite: PasswordInvite = self.validated_data["invite"]
+        user = invite.user
+        user.set_password(self.validated_data["password"])
+        user.save(update_fields=["password"])
+        invite.used_at = timezone.now()
+        invite.save(update_fields=["used_at"])
+        # Invalidate other unused invites for this user
+        PasswordInvite.objects.filter(user=user, used_at__isnull=True).exclude(pk=invite.pk).update(
+            used_at=timezone.now()
+        )
+        return user
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -55,60 +102,162 @@ class ProjectDetailSerializer(ProjectSerializer):
 
 
 class ContractorSerializer(serializers.ModelSerializer):
+    activated = serializers.SerializerMethodField()
+
     class Meta:
         model = Contractor
-        fields = ["id", "name", "phone", "email"]
+        fields = [
+            "id",
+            "name",
+            "phone",
+            "email",
+            "connect_status",
+            "archived",
+            "activated",
+            "created_at",
+        ]
+        read_only_fields = ["id", "connect_status", "archived", "activated", "created_at"]
 
-    def validate(self, attrs):
-        phone = attrs.get("phone", getattr(self.instance, "phone", ""))
-        email = attrs.get("email", getattr(self.instance, "email", ""))
-        if not phone and not email:
-            raise serializers.ValidationError("Provide a phone or email.")
-        return attrs
-
-
-class AssignmentSerializer(serializers.ModelSerializer):
-    contractor = ContractorSerializer(read_only=True)
-    link = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Assignment
-        fields = ["id", "contractor", "hourly_rate", "token", "revoked", "link", "created_at"]
-        read_only_fields = fields
-
-    def get_link(self, obj):
-        request = self.context.get("request")
-        path = obj.link_path
-        if request:
-            return request.build_absolute_uri(path)
-        return path
+    def get_activated(self, obj):
+        return obj.user.has_usable_password()
 
 
-class AssignmentCreateSerializer(serializers.Serializer):
+class ContractorCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
     phone = serializers.CharField(max_length=40, required=False, allow_blank=True, default="")
-    email = serializers.EmailField(required=False, allow_blank=True, default="")
-    hourly_rate = serializers.DecimalField(
-        max_digits=10, decimal_places=2, min_value=Decimal("0.01")
-    )
+    email = serializers.EmailField()
 
     def validate(self, attrs):
         if not attrs.get("phone") and not attrs.get("email"):
             raise serializers.ValidationError("Provide a phone or email.")
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
-        project = self.context["project"]
+        client = self.context["request"].user
+        email = User.objects.normalize_email(validated_data["email"])
+        existing = Contractor.objects.filter(email__iexact=email).first()
+
+        if existing:
+            ClientContractor.objects.get_or_create(client=client, contractor=existing)
+            # Silent roster add — no invite, no notify
+            return existing
+
+        user = User.objects.create_user(
+            email=email,
+            password=None,
+            role=User.Role.CONTRACTOR,
+        )
         contractor = Contractor.objects.create(
+            user=user,
             name=validated_data["name"],
             phone=validated_data.get("phone", ""),
-            email=validated_data.get("email", ""),
+            email=email,
         )
-        return Assignment.objects.create(
+        ClientContractor.objects.create(client=client, contractor=contractor)
+        _issue_password_invite(user, contractor)
+        return contractor
+
+
+def _issue_password_invite(user: User, contractor: Contractor) -> str:
+    # Invalidate prior unused invites
+    PasswordInvite.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())
+    invite, raw = PasswordInvite.create_for_user(user)
+    origin = getattr(settings, "APP_ORIGIN", "http://localhost").rstrip("/")
+    set_password_url = f"{origin}/auth/set-password?token={raw}"
+    notifications.notify(
+        notifications.EVENT_CONTRACTOR_INVITED,
+        {
+            "contractor_id": contractor.id,
+            "email": contractor.email,
+            "name": contractor.name,
+            "set_password_url": set_password_url,
+            "invite_token": raw,
+        },
+    )
+    return raw
+
+
+class AssignmentSerializer(serializers.ModelSerializer):
+    contractor = ContractorSerializer(read_only=True)
+
+    class Meta:
+        model = Assignment
+        fields = [
+            "id",
+            "contractor",
+            "hourly_rate",
+            "status",
+            "invited_at",
+            "responded_at",
+            "created_at",
+            "project",
+        ]
+        read_only_fields = fields
+
+
+class AssignmentCreateSerializer(serializers.Serializer):
+    contractor_id = serializers.IntegerField()
+    hourly_rate = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal("0.01")
+    )
+
+    def validate(self, attrs):
+        project: Project = self.context["project"]
+        client = project.owner
+        try:
+            contractor = Contractor.objects.get(pk=attrs["contractor_id"])
+        except Contractor.DoesNotExist as exc:
+            raise serializers.ValidationError({"contractor_id": "Contractor not found."}) from exc
+
+        if not ClientContractor.objects.filter(
+            client=client, contractor=contractor, archived=False
+        ).exists():
+            raise serializers.ValidationError({"contractor_id": "Contractor not found."})
+
+        if contractor.connect_status != Contractor.ConnectStatus.COMPLETE:
+            raise serializers.ValidationError(
+                {
+                    "contractor_id": (
+                        "Contractor must complete Stripe Connect onboarding before assignment."
+                    )
+                }
+            )
+
+        if Assignment.objects.filter(
             project=project,
             contractor=contractor,
+            status__in=[Assignment.Status.INVITED, Assignment.Status.ACCEPTED],
+        ).exists():
+            raise serializers.ValidationError(
+                {"contractor_id": "Contractor already has an active assignment on this project."}
+            )
+
+        attrs["contractor"] = contractor
+        return attrs
+
+    def create(self, validated_data):
+        project = self.context["project"]
+        assignment = Assignment.objects.create(
+            project=project,
+            contractor=validated_data["contractor"],
             hourly_rate=validated_data["hourly_rate"],
+            status=Assignment.Status.INVITED,
+            invited_at=timezone.now(),
         )
+        notifications.notify(
+            notifications.EVENT_ASSIGNMENT_INVITED,
+            {
+                "assignment_id": assignment.id,
+                "project_id": project.id,
+                "project_name": project.name,
+                "contractor_id": assignment.contractor_id,
+                "contractor_email": assignment.contractor.email,
+                "contractor_name": assignment.contractor.name,
+                "hourly_rate": str(assignment.hourly_rate),
+            },
+        )
+        return assignment
 
 
 class PhotoSerializer(serializers.ModelSerializer):
@@ -130,11 +279,11 @@ class PhotoSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         request = self.context.get("request")
-        # Client photos served via authenticated endpoint
-        path = f"/api/photos/{obj.id}/"
-        token = self.context.get("contractor_token")
-        if token:
-            path = f"/api/c/{token}/photos/{obj.id}/"
+        assignment_id = self.context.get("assignment_id")
+        if assignment_id:
+            path = f"/api/contractor/assignments/{assignment_id}/photos/{obj.id}/"
+        else:
+            path = f"/api/photos/{obj.id}/"
         if request:
             return request.build_absolute_uri(path)
         return path
@@ -178,7 +327,9 @@ class JobSerializer(serializers.ModelSerializer):
     def get_found_issues(self, obj):
         if self.context.get("nest_found_issues", True) and obj.parent_id is None:
             children = obj.found_issues.all().prefetch_related("photos")
-            return JobSerializer(children, many=True, context={**self.context, "nest_found_issues": False}).data
+            return JobSerializer(
+                children, many=True, context={**self.context, "nest_found_issues": False}
+            ).data
         return []
 
 

@@ -65,8 +65,9 @@ async function refresh() {
       :on-dispute-job="(id, comment) => api.disputeJob(id, comment)"
       :on-approve-visit="(id) => api.approveVisit(id)"
       :on-dispute-visit="(id, comment) => api.disputeVisit(id, comment)"
-      :on-revoke="(id) => api.revokeAssignment(id)"
+      :on-cancel="(id) => api.cancelAssignment(id)"
       :on-assign="(payload) => api.createAssignment(projectId, payload)"
+      :list-contractors="() => api.listContractors()"
       :export-url="api.exportUrl(projectId)"
       @refresh="refresh"
     />

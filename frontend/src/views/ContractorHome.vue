@@ -1,7 +1,7 @@
 <script setup>
 defineProps({
   summary: { type: Object, required: true },
-  token: { type: String, required: true },
+  assignmentId: { type: [String, Number], required: true },
 })
 </script>
 
@@ -14,15 +14,21 @@ defineProps({
     </header>
 
     <nav class="actions">
-      <RouterLink class="btn" :to="`/c/${token}/jobs/new`">Start a job</RouterLink>
-      <RouterLink class="btn secondary" :to="`/c/${token}/visits/new`">Log a visit</RouterLink>
+      <RouterLink class="btn" :to="`/contractor/assignments/${assignmentId}/jobs/new`">
+        Start a job
+      </RouterLink>
+      <RouterLink class="btn secondary" :to="`/contractor/assignments/${assignmentId}/visits/new`">
+        Log a visit
+      </RouterLink>
     </nav>
 
     <section>
       <h2>Open jobs</h2>
       <ul v-if="summary.open_jobs?.length" class="list">
         <li v-for="job in summary.open_jobs" :key="job.id">
-          <RouterLink :to="`/c/${token}/jobs/${job.id}/finish`">{{ job.label }}</RouterLink>
+          <RouterLink :to="`/contractor/assignments/${assignmentId}/jobs/${job.id}/finish`">
+            {{ job.label }}
+          </RouterLink>
           <span v-if="job.is_found_issue" class="badge">Found issue</span>
         </li>
       </ul>
@@ -44,11 +50,13 @@ defineProps({
       <h2>Needs your response</h2>
       <ul class="list disputes">
         <li v-for="job in summary.disputed_jobs || []" :key="`j-${job.id}`">
-          <RouterLink :to="`/c/${token}/jobs/${job.id}/resubmit`">{{ job.label }}</RouterLink>
+          <RouterLink :to="`/contractor/assignments/${assignmentId}/jobs/${job.id}/resubmit`">
+            {{ job.label }}
+          </RouterLink>
           <p class="comment">{{ job.client_comment }}</p>
         </li>
         <li v-for="visit in summary.disputed_visits || []" :key="`v-${visit.id}`">
-          <RouterLink :to="`/c/${token}/visits/${visit.id}/resubmit`">
+          <RouterLink :to="`/contractor/assignments/${assignmentId}/visits/${visit.id}/resubmit`">
             Visit {{ visit.date }} ({{ visit.hours }}h)
           </RouterLink>
           <p class="comment">{{ visit.client_comment }}</p>
@@ -80,12 +88,10 @@ h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
 .badge {
   margin-left: 0.5rem;
   font-size: 0.75rem;
-  background: #e7efe4;
-  color: #2d4a34;
-  padding: 0.1rem 0.4rem;
+  background: #e8efe6;
+  padding: 0.15rem 0.4rem;
   border-radius: 0.25rem;
 }
-.comment { margin: 0.25rem 0 0; color: #6b3b2a; }
-.muted { color: #667066; font-size: 0.9rem; }
-.empty { color: #667066; margin: 0; }
+.muted, .empty { color: #5c6b5a; }
+.comment { margin: 0.25rem 0 0; color: #6b4a3a; }
 </style>

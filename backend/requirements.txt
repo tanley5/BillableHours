@@ -6,3 +6,4 @@ Pillow==11.1.0
 python-dotenv==1.0.1
 gunicorn==23.0.0
 django-cors-headers==4.7.0
+stripe==11.6.0

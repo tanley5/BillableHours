@@ -7,9 +7,9 @@ import FinishJobForm from '../components/FinishJobForm.vue'
 
 const route = useRoute()
 const router = useRouter()
-const token = route.params.token
+const assignmentId = route.params.assignmentId
 const jobId = Number(route.params.jobId)
-const api = createContractorApi(token)
+const api = createContractorApi(assignmentId)
 const job = ref(null)
 const error = ref('')
 
@@ -48,13 +48,13 @@ async function submitFinish({ notes, photos, location, capturedAt }) {
 }
 
 function onSubmitted() {
-  router.push(`/c/${token}`)
+  router.push(`/contractor/assignments/${assignmentId}`)
 }
 </script>
 
 <template>
   <div>
-    <RouterLink class="back" :to="`/c/${token}`">← Back</RouterLink>
+    <RouterLink class="back" :to="`/contractor/assignments/${assignmentId}`">← Back</RouterLink>
     <p v-if="error" class="error">{{ error }}</p>
     <FinishJobForm v-if="job" :job="job" :submit-finish="submitFinish" @submitted="onSubmitted" />
   </div>

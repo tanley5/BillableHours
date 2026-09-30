@@ -127,8 +127,21 @@ PHOTO_MAX_BYTES = 5 * 1024 * 1024
 PHOTO_MAX_PER_KIND = 10
 PHOTO_MAX_DIMENSION = 1920
 VISIT_MAX_HOURS = 16
-TOKEN_BYTES = 32
 
 # n8n notifications (empty disables delivery)
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "")
 N8N_WEBHOOK_TIMEOUT = float(os.environ.get("N8N_WEBHOOK_TIMEOUT", "3"))
+
+# Public app origin (invite / Connect return URLs)
+APP_ORIGIN = os.environ.get("APP_ORIGIN", "http://localhost")
+PASSWORD_INVITE_TTL_DAYS = int(os.environ.get("PASSWORD_INVITE_TTL_DAYS", "7"))
+
+# Stripe Connect Express
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_CONNECT_RETURN_URL = os.environ.get(
+    "STRIPE_CONNECT_RETURN_URL", f"{APP_ORIGIN}/contractor/connect/return"
+)
+STRIPE_CONNECT_REFRESH_URL = os.environ.get(
+    "STRIPE_CONNECT_REFRESH_URL", f"{APP_ORIGIN}/contractor/connect/refresh"
+)

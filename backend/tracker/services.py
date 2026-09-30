@@ -21,13 +21,16 @@ class LockConflict(DRFValidationError):
 
 
 def assert_assignment_active(assignment: Assignment):
-    if assignment.revoked:
-        raise PermissionDenied("This link has been revoked.")
+    if assignment.status != Assignment.Status.ACCEPTED:
+        raise PermissionDenied("Assignment must be accepted before performing this action.")
 
 
 def project_totals(project):
     """Roll-up hours and cost for a project (approved vs pending)."""
-    visits = Visit.objects.filter(assignment__project=project, assignment__revoked=False)
+    visits = Visit.objects.filter(
+        assignment__project=project,
+        assignment__status=Assignment.Status.ACCEPTED,
+    )
     approved = visits.filter(status=Visit.Status.APPROVED)
     pending = visits.filter(status=Visit.Status.PENDING)
 

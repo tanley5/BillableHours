@@ -1,4 +1,6 @@
+import hashlib
 import secrets
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -6,6 +8,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -15,7 +18,10 @@ class UserManager(BaseUserManager):
             raise ValueError("Email is required")
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+        if password is None:
+            user.set_unusable_password()
+        else:
+            user.set_password(password)
         user.save(using=self._db)
         return user
 
@@ -29,6 +35,7 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
         CLIENT = "client", "Client"
+        CONTRACTOR = "contractor", "Contractor"
 
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.CLIENT)
@@ -58,9 +65,23 @@ class Project(models.Model):
 
 
 class Contractor(models.Model):
+    class ConnectStatus(models.TextChoices):
+        NOT_STARTED = "not_started", "Not started"
+        PENDING = "pending", "Pending"
+        COMPLETE = "complete", "Complete"
+        RESTRICTED = "restricted", "Restricted"
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="contractor_profile")
     name = models.CharField(max_length=200)
     phone = models.CharField(max_length=40, blank=True)
-    email = models.EmailField(blank=True)
+    email = models.EmailField(unique=True)
+    stripe_connect_account_id = models.CharField(max_length=255, blank=True, default="")
+    connect_status = models.CharField(
+        max_length=20,
+        choices=ConnectStatus.choices,
+        default=ConnectStatus.NOT_STARTED,
+    )
+    archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
@@ -70,12 +91,69 @@ class Contractor(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def has_active_assignments(self):
+        return self.assignments.filter(
+            status__in=[Assignment.Status.INVITED, Assignment.Status.ACCEPTED]
+        ).exists()
 
-def generate_assignment_token():
-    return secrets.token_urlsafe(settings.TOKEN_BYTES)
+
+class ClientContractor(models.Model):
+    """Client's contractor pool (roster). Silent — not visible on contractor home."""
+
+    client = models.ForeignKey(User, on_delete=models.CASCADE, related_name="roster")
+    contractor = models.ForeignKey(Contractor, on_delete=models.CASCADE, related_name="roster_memberships")
+    archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("client", "contractor")]
+
+    def __str__(self):
+        return f"{self.client_id}:{self.contractor_id}"
+
+
+def hash_invite_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def generate_invite_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+class PasswordInvite(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_invites")
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @classmethod
+    def create_for_user(cls, user: User) -> tuple["PasswordInvite", str]:
+        raw = generate_invite_token()
+        ttl = getattr(settings, "PASSWORD_INVITE_TTL_DAYS", 7)
+        invite = cls.objects.create(
+            user=user,
+            token_hash=hash_invite_token(raw),
+            expires_at=timezone.now() + timedelta(days=ttl),
+        )
+        return invite, raw
+
+    def is_valid(self, raw: str) -> bool:
+        if self.used_at is not None:
+            return False
+        if timezone.now() >= self.expires_at:
+            return False
+        return secrets.compare_digest(self.token_hash, hash_invite_token(raw))
 
 
 class Assignment(models.Model):
+    class Status(models.TextChoices):
+        INVITED = "invited", "Invited"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        CANCELLED = "cancelled", "Cancelled"
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="assignments")
     contractor = models.ForeignKey(Contractor, on_delete=models.CASCADE, related_name="assignments")
     hourly_rate = models.DecimalField(
@@ -83,19 +161,26 @@ class Assignment(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
     )
-    token = models.CharField(max_length=64, unique=True, default=generate_assignment_token, editable=False)
-    revoked = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.INVITED)
+    invited_at = models.DateTimeField(default=timezone.now)
+    responded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = [("project", "contractor")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "contractor"],
+                condition=Q(status__in=["invited", "accepted"]),
+                name="unique_active_assignment_per_project_contractor",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.contractor} @ {self.project}"
+        return f"{self.contractor} @ {self.project} ({self.status})"
 
     @property
-    def link_path(self):
-        return f"/c/{self.token}"
+    def is_active(self):
+        return self.status in (self.Status.INVITED, self.Status.ACCEPTED)
 
 
 class Visit(models.Model):
@@ -119,7 +204,6 @@ class Visit(models.Model):
     client_comment = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    # Tracks lineage when a disputed visit is corrected/resubmitted
     supersedes = models.ForeignKey(
         "self",
         null=True,

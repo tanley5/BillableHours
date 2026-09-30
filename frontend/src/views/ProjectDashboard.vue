@@ -10,8 +10,9 @@ const props = defineProps({
   onDisputeJob: { type: Function, required: true },
   onApproveVisit: { type: Function, required: true },
   onDisputeVisit: { type: Function, required: true },
-  onRevoke: { type: Function, required: true },
+  onCancel: { type: Function, required: true },
   onAssign: { type: Function, required: true },
+  listContractors: { type: Function, required: true },
   exportUrl: { type: String, required: true },
 })
 
@@ -47,11 +48,6 @@ async function run(action) {
   } finally {
     busy.value = false
   }
-}
-
-async function copyLink(link) {
-  await navigator.clipboard.writeText(link)
-  message.value = 'Link copied.'
 }
 
 function startDispute(kind, id) {
@@ -95,7 +91,7 @@ async function assign(payload) {
 }
 
 function onAssigned(assignment) {
-  message.value = `Assigned ${assignment.contractor?.name || 'contractor'}. Copy their link below.`
+  message.value = `Invited ${assignment.contractor?.name || 'contractor'}.`
   emit('refresh')
 }
 </script>
@@ -141,30 +137,26 @@ function onAssigned(assignment) {
         <li v-for="a in project.assignments || []" :key="a.id">
           <div>
             <strong>{{ a.contractor.name }}</strong>
-            <span class="muted"> · ${{ a.hourly_rate }}/hr</span>
-            <span v-if="a.revoked" class="badge warn">Revoked</span>
+            <span class="muted"> · ${{ a.hourly_rate }}/hr · {{ a.status }}</span>
           </div>
-          <div class="row-actions" v-if="!a.revoked">
-            <button
-              type="button"
-              :data-test="`copy-link-${a.id}`"
-              @click="copyLink(a.link)"
-            >
-              Copy link
-            </button>
+          <div class="row-actions" v-if="a.status === 'invited'">
             <button
               type="button"
               class="danger"
-              :data-test="`revoke-${a.id}`"
+              :data-test="`cancel-${a.id}`"
               :disabled="busy"
-              @click="run(() => onRevoke(a.id))"
+              @click="run(() => onCancel(a.id))"
             >
-              Revoke
+              Cancel invite
             </button>
           </div>
         </li>
       </ul>
-      <AssignContractorForm :assign="assign" @assigned="onAssigned" />
+      <AssignContractorForm
+        :assign="assign"
+      :list-contractors="listContractors"
+        @assigned="onAssigned"
+      />
     </section>
 
     <section>

@@ -5,21 +5,21 @@ import LogVisitForm from '../components/LogVisitForm.vue'
 
 const route = useRoute()
 const router = useRouter()
-const token = route.params.token
-const api = createContractorApi(token)
+const assignmentId = route.params.assignmentId
+const api = createContractorApi(assignmentId)
 
 async function submitVisit(payload) {
   return api.createVisit(payload)
 }
 
 function onSubmitted() {
-  router.push(`/c/${token}`)
+  router.push(`/contractor/assignments/${assignmentId}`)
 }
 </script>
 
 <template>
   <div>
-    <RouterLink class="back" :to="`/c/${token}`">← Back</RouterLink>
+    <RouterLink class="back" :to="`/contractor/assignments/${assignmentId}`">← Back</RouterLink>
     <LogVisitForm :submit-visit="submitVisit" @submitted="onSubmitted" />
   </div>
 </template>

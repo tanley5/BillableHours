@@ -8,11 +8,22 @@ from django.db import transaction
 from django.utils import timezone
 from PIL import Image
 
-from tracker.models import Assignment, Contractor, Job, Photo, Project, User, Visit
+from tracker.models import (
+    Assignment,
+    ClientContractor,
+    Contractor,
+    Job,
+    Photo,
+    Project,
+    User,
+    Visit,
+)
 
 PROJECT_NAME = "Bathtub repair"
 CLIENT_EMAIL = "owner@example.com"
 CLIENT_PASSWORD = "changeme123"
+CONTRACTOR_EMAIL = "alex@example.com"
+CONTRACTOR_PASSWORD = "contractor123"
 
 
 def _jpeg_content(color: str, name: str) -> ContentFile:
@@ -33,7 +44,7 @@ def _add_photo(job: Job, kind: str, color: str, captured_at=None) -> Photo:
 
 
 class Command(BaseCommand):
-    help = "Load the SPEC bathtub repair demo scenario (Phase 5)."
+    help = "Load the SPEC bathtub repair demo scenario (Phase 5 / Phase1 Connect)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -61,7 +72,11 @@ class Command(BaseCommand):
 
         existing = Project.objects.filter(owner=user, name=PROJECT_NAME).first()
         if existing and not options["reset"]:
-            self.stdout.write(self.style.WARNING(f"Scenario already present (project id={existing.id}). Use --reset to recreate."))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Scenario already present (project id={existing.id}). Use --reset to recreate."
+                )
+            )
             return
 
         if existing and options["reset"]:
@@ -73,15 +88,34 @@ class Command(BaseCommand):
             scope="Repair the master bathroom bathtub and address related water damage.",
             budget=Decimal("2500.00"),
         )
-        contractor = Contractor.objects.create(
-            name="Alex Contractor",
-            phone="555-0100",
-            email="alex@example.com",
+
+        c_user, c_created = User.objects.get_or_create(
+            email=CONTRACTOR_EMAIL,
+            defaults={"role": User.Role.CONTRACTOR},
         )
+        c_user.role = User.Role.CONTRACTOR
+        c_user.set_password(CONTRACTOR_PASSWORD)
+        c_user.save()
+
+        contractor, _ = Contractor.objects.update_or_create(
+            email=CONTRACTOR_EMAIL,
+            defaults={
+                "user": c_user,
+                "name": "Alex Contractor",
+                "phone": "555-0100",
+                "connect_status": Contractor.ConnectStatus.COMPLETE,
+                "stripe_connect_account_id": "acct_seed_alex",
+                "archived": False,
+            },
+        )
+        ClientContractor.objects.get_or_create(client=user, contractor=contractor)
+
         assignment = Assignment.objects.create(
             project=project,
             contractor=contractor,
             hourly_rate=Decimal("75.00"),
+            status=Assignment.Status.ACCEPTED,
+            responded_at=timezone.now(),
         )
 
         bathtub = Job.objects.create(
@@ -148,6 +182,6 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Seeded '{PROJECT_NAME}' (project id={project.id}). "
-                f"Contractor link path: {assignment.link_path}"
+                f"Contractor login: {CONTRACTOR_EMAIL} / {CONTRACTOR_PASSWORD}"
             )
         )

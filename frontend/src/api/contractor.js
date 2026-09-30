@@ -1,3 +1,8 @@
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
 async function parseError(response) {
   let detail = `Request failed (${response.status})`
   try {
@@ -13,8 +18,28 @@ async function parseError(response) {
   return err
 }
 
-async function request(path, options = {}) {
-  const response = await fetch(path, options)
+async function request(path, { method = 'GET', body, json = true } = {}) {
+  const headers = {}
+  if (json && body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+  }
+  const csrf = getCookie('csrftoken')
+  if (csrf && method !== 'GET' && method !== 'HEAD') {
+    headers['X-CSRFToken'] = csrf
+  }
+
+  let payload = body
+  if (body !== undefined && json) {
+    payload = JSON.stringify(body)
+  }
+
+  const response = await fetch(path, {
+    method,
+    credentials: 'include',
+    headers,
+    body: payload === undefined ? undefined : payload,
+  })
+
   if (!response.ok) {
     throw await parseError(response)
   }
@@ -22,53 +47,79 @@ async function request(path, options = {}) {
   return response.json()
 }
 
-export function createContractorApi(token) {
-  const base = `/api/c/${token}`
+export function createContractorApi(assignmentId) {
+  const base = `/api/contractor/assignments/${assignmentId}`
 
   return {
+    async ensureCsrf() {
+      if (getCookie('csrftoken')) return
+      await fetch('/api/auth/csrf/', { credentials: 'include' })
+    },
+    listAssignments() {
+      return request('/api/contractor/assignments/')
+    },
+    me() {
+      return request('/api/contractor/me/')
+    },
     getSummary() {
-      return request(`${base}/`, { method: 'GET' })
+      return request(`${base}/`)
+    },
+    accept() {
+      return request(`${base}/accept/`, { method: 'POST', body: {} })
+    },
+    reject() {
+      return request(`${base}/reject/`, { method: 'POST', body: {} })
+    },
+    startConnect() {
+      return request('/api/contractor/connect/onboard/', { method: 'POST', body: {} })
     },
     createJob(payload) {
-      return request(`${base}/jobs/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      return request(`${base}/jobs/`, { method: 'POST', body: payload })
     },
     updateJob(id, payload) {
-      return request(`${base}/jobs/${id}/`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      return request(`${base}/jobs/${id}/`, { method: 'PATCH', body: payload })
     },
     uploadPhoto(jobId, formData) {
       return request(`${base}/jobs/${jobId}/photos/`, {
         method: 'POST',
         body: formData,
+        json: false,
       })
     },
     createVisit(payload) {
-      return request(`${base}/visits/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      return request(`${base}/visits/`, { method: 'POST', body: payload })
     },
     resubmitVisit(id, payload) {
-      return request(`${base}/visits/${id}/resubmit/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      return request(`${base}/visits/${id}/resubmit/`, { method: 'POST', body: payload })
     },
     resubmitJob(id, payload) {
-      return request(`${base}/jobs/${id}/resubmit/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      return request(`${base}/jobs/${id}/resubmit/`, { method: 'POST', body: payload })
+    },
+  }
+}
+
+/** Session helpers shared with login (no assignment required). */
+export function createContractorSessionApi() {
+  return {
+    async ensureCsrf() {
+      if (getCookie('csrftoken')) return
+      await fetch('/api/auth/csrf/', { credentials: 'include' })
+    },
+    async login(email, password) {
+      await this.ensureCsrf()
+      return request('/api/auth/login/', { method: 'POST', body: { email, password } })
+    },
+    logout() {
+      return request('/api/auth/logout/', { method: 'POST', body: {} })
+    },
+    me() {
+      return request('/api/contractor/me/')
+    },
+    listAssignments() {
+      return request('/api/contractor/assignments/')
+    },
+    startConnect() {
+      return request('/api/contractor/connect/onboard/', { method: 'POST', body: {} })
     },
   }
 }

@@ -53,7 +53,10 @@ async function logout() {
         <h1>Projects</h1>
         <p v-if="user" class="muted">{{ user.email }}</p>
       </div>
-      <button type="button" class="ghost" @click="logout">Log out</button>
+      <div class="top-actions">
+        <RouterLink class="ghost link" to="/app/contractors">Contractors</RouterLink>
+        <button type="button" class="ghost" @click="logout">Log out</button>
+      </div>
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -84,6 +87,10 @@ h1 { margin: 0.2rem 0; }
   border-radius: 0.35rem;
   padding: 0.45rem 0.7rem;
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: inline-block;
 }
+.top-actions { display: flex; gap: 0.5rem; align-items: center; }
 .error { color: #8a2f1f; }
 </style>

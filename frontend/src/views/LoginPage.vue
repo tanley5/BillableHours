@@ -8,10 +8,15 @@ const router = useRouter()
 const api = createClientApi()
 const checking = ref(true)
 
+function redirectForRole(role) {
+  if (role === 'contractor') router.replace('/contractor')
+  else router.replace('/app/projects')
+}
+
 onMounted(async () => {
   try {
-    await api.me()
-    router.replace('/app/projects')
+    const me = await api.me()
+    redirectForRole(me.role)
   } catch {
     checking.value = false
   }
@@ -21,8 +26,8 @@ async function login(email, password) {
   return api.login(email, password)
 }
 
-function onSuccess() {
-  router.push('/app/projects')
+function onSuccess(user) {
+  redirectForRole(user?.role)
 }
 </script>
 

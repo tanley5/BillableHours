@@ -66,6 +66,12 @@ export function createClientApi() {
     me() {
       return request('/api/auth/me/')
     },
+    setPassword(token, password) {
+      return request('/api/auth/set-password/', {
+        method: 'POST',
+        body: { token, password },
+      })
+    },
     listProjects() {
       return request('/api/projects/')
     },
@@ -81,14 +87,23 @@ export function createClientApi() {
     listVisits(projectId) {
       return request(`/api/projects/${projectId}/visits/`)
     },
+    listContractors() {
+      return request('/api/contractors/')
+    },
+    createContractor(payload) {
+      return request('/api/contractors/', { method: 'POST', body: payload })
+    },
+    resendContractorInvite(id) {
+      return request(`/api/contractors/${id}/resend-invite/`, { method: 'POST', body: {} })
+    },
     createAssignment(projectId, payload) {
       return request(`/api/projects/${projectId}/assignments/`, {
         method: 'POST',
         body: payload,
       })
     },
-    revokeAssignment(id) {
-      return request(`/api/assignments/${id}/revoke/`, { method: 'POST', body: {} })
+    cancelAssignment(id) {
+      return request(`/api/assignments/${id}/cancel/`, { method: 'POST', body: {} })
     },
     approveJob(id) {
       return request(`/api/jobs/${id}/approve/`, { method: 'POST', body: {} })

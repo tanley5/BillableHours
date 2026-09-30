@@ -11,6 +11,8 @@ EVENT_JOB_CREATED = "job.created"
 EVENT_FOUND_ISSUE = "job.found_issue"
 EVENT_VISIT_CREATED = "visit.created"
 EVENT_RESUBMIT = "entry.resubmitted"
+EVENT_CONTRACTOR_INVITED = "contractor.invited"
+EVENT_ASSIGNMENT_INVITED = "assignment.invited"
 
 
 def notify(event: str, data: dict | None = None) -> None:

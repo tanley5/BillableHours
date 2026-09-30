@@ -7,8 +7,8 @@ import StartJobForm from '../components/StartJobForm.vue'
 
 const route = useRoute()
 const router = useRouter()
-const token = route.params.token
-const api = createContractorApi(token)
+const assignmentId = route.params.assignmentId
+const api = createContractorApi(assignmentId)
 const openJobs = ref([])
 const error = ref('')
 
@@ -47,13 +47,13 @@ async function submitJob({ label, notes, parent, photos, location, capturedAt })
 }
 
 function onSubmitted() {
-  router.push(`/c/${token}`)
+  router.push(`/contractor/assignments/${assignmentId}`)
 }
 </script>
 
 <template>
   <div>
-    <RouterLink class="back" :to="`/c/${token}`">← Back</RouterLink>
+    <RouterLink class="back" :to="`/contractor/assignments/${assignmentId}`">← Back</RouterLink>
     <p v-if="error" class="error">{{ error }}</p>
     <StartJobForm :open-jobs="openJobs" :submit-job="submitJob" @submitted="onSubmitted" />
   </div>
