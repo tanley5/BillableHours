@@ -170,9 +170,14 @@ def capture_escrow(escrow: Escrow) -> Escrow:
 
 
 def freeze_project(project: Project, *, reason: str) -> Project:
+    was_frozen = project.frozen
     project.frozen = True
     project.frozen_reason = reason
     project.save(update_fields=["frozen", "frozen_reason", "updated_at"])
+    if not was_frozen:
+        from . import notify as notifications
+
+        notifications.notify_project_frozen(project, reason=reason)
     return project
 
 
@@ -185,6 +190,9 @@ def maybe_unfreeze_project(project: Project) -> Project:
     project.frozen = False
     project.frozen_reason = ""
     project.save(update_fields=["frozen", "frozen_reason", "updated_at"])
+    from . import notify as notifications
+
+    notifications.notify_project_unfrozen(project)
     return project
 
 

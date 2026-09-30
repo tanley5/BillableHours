@@ -92,6 +92,9 @@ def create_contractor_subjob(*, project: Project, contractor, label: str, before
     )
     SubJobPhoto.objects.create(sub_job=sub, file=before_file)
     recompute_project_status(project)
+    from . import notify as notifications
+
+    notifications.notify_subjob_pending_approval(sub)
     return sub
 
 
@@ -156,6 +159,9 @@ def create_submission(*, sub_job: SubJob, contractor, hours: Decimal, notes: str
     locked.status = SubJob.Status.PENDING_REVIEW
     locked.save(update_fields=["status", "updated_at"])
     recompute_project_status(locked.project)
+    from . import notify as notifications
+
+    notifications.notify_submission_received(submission)
     return submission
 
 

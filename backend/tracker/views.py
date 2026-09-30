@@ -466,6 +466,10 @@ class ContractorAssignmentAcceptView(APIView):
         assignment.responded_at = timezone.now()
         assignment.save(update_fields=["status", "responded_at"])
         recompute_project_status(assignment.project)
+        assignment.refresh_from_db()
+        notifications.notify_assignment_accepted(
+            Assignment.objects.select_related("project", "contractor").get(pk=assignment.pk)
+        )
         return Response(AssignmentSerializer(assignment).data)
 
 
