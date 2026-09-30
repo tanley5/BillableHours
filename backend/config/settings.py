@@ -136,9 +136,10 @@ N8N_WEBHOOK_TIMEOUT = float(os.environ.get("N8N_WEBHOOK_TIMEOUT", "3"))
 APP_ORIGIN = os.environ.get("APP_ORIGIN", "http://localhost")
 PASSWORD_INVITE_TTL_DAYS = int(os.environ.get("PASSWORD_INVITE_TTL_DAYS", "7"))
 
-# Stripe Connect Express
+# Stripe Connect Express (set STRIPE_API_BASE to stripe-sim for local demos)
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_API_BASE = os.environ.get("STRIPE_API_BASE", "").rstrip("/")
 STRIPE_CONNECT_RETURN_URL = os.environ.get(
     "STRIPE_CONNECT_RETURN_URL", f"{APP_ORIGIN}/contractor/connect/return"
 )

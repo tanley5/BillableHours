@@ -15,6 +15,9 @@ services:
     env_file: .env
     environment:
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/billable-events}
+      STRIPE_API_BASE: ${STRIPE_API_BASE:-http://stripe-sim:12111}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_sim}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_sim}
     volumes:
       - ./backend:/app
       - photo_storage:/media
@@ -23,9 +26,20 @@ services:
         condition: service_healthy
       n8n:
         condition: service_started
+      stripe-sim:
+        condition: service_started
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
+
+  stripe-sim:
+    build: ./stripe-sim
+    ports:
+      - "12111:12111"
+    environment:
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_sim}
+      STRIPE_SIM_WEBHOOK_URL: http://api:8000/api/stripe/webhook/
+      STRIPE_SIM_PUBLIC_BASE: http://localhost:12111
 
   web:
     build: ./frontend

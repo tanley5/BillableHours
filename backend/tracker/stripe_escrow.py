@@ -21,6 +21,11 @@ PLATFORM_FEE_RATE = Decimal("0.02")
 
 def _stripe():
     stripe.api_key = settings.STRIPE_SECRET_KEY
+    api_base = getattr(settings, "STRIPE_API_BASE", "") or ""
+    if api_base:
+        stripe.api_base = api_base
+    else:
+        stripe.api_base = stripe.DEFAULT_API_BASE
     return stripe
 
 
