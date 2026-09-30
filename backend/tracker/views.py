@@ -372,6 +372,15 @@ class ProjectExportCsvView(APIView):
         return response
 
 
+class ReportDashboardView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def get(self, request):
+        from .reporting import client_report
+
+        return Response(client_report(request.user))
+
+
 class ClientPhotoDownloadView(APIView):
     permission_classes = [IsAuthenticated, IsClient]
 

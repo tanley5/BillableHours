@@ -12,6 +12,7 @@ import SetPasswordPage from './views/SetPasswordPage.vue'
 import ProjectListPage from './views/ProjectListPage.vue'
 import ProjectDetailPage from './views/ProjectDetailPage.vue'
 import ContractorsPage from './views/ContractorsPage.vue'
+import ReportsPage from './views/ReportsPage.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -22,6 +23,7 @@ export const router = createRouter({
     { path: '/app/projects', name: 'projects', component: ProjectListPage },
     { path: '/app/projects/:projectId', name: 'project-detail', component: ProjectDetailPage },
     { path: '/app/contractors', name: 'contractors', component: ContractorsPage },
+    { path: '/app/reports', name: 'reports', component: ReportsPage },
     { path: '/contractor', name: 'contractor-home', component: ContractorAssignmentsPage },
     { path: '/contractor/connect', name: 'contractor-connect', component: ContractorConnectPage },
     { path: '/contractor/connect/return', name: 'contractor-connect-return', component: ContractorConnectPage },

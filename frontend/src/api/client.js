@@ -80,6 +80,9 @@ export function createClientApi() {
     listProjects() {
       return request('/api/projects/')
     },
+    reportDashboard() {
+      return request('/api/reports/dashboard/')
+    },
     createProject(payload) {
       return request('/api/projects/', { method: 'POST', body: payload })
     },

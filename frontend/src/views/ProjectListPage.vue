@@ -54,6 +54,7 @@ async function logout() {
         <p v-if="user" class="muted">{{ user.email }}</p>
       </div>
       <div class="top-actions">
+        <RouterLink class="ghost link" to="/app/reports">Reports</RouterLink>
         <RouterLink class="ghost link" to="/app/contractors">Contractors</RouterLink>
         <button type="button" class="ghost" @click="logout">Log out</button>
       </div>

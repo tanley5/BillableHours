@@ -11,6 +11,8 @@ urlpatterns = [
     path("auth/set-password/", views.SetPasswordView.as_view(), name="set-password"),
     # Stripe
     path("stripe/webhook/", views.StripeWebhookView.as_view(), name="stripe-webhook"),
+    # Reports
+    path("reports/dashboard/", views.ReportDashboardView.as_view(), name="report-dashboard"),
     # Client projects / contractors
     path("projects/", views.ProjectListCreateView.as_view(), name="project-list"),
     path("projects/<int:pk>/", views.ProjectDetailView.as_view(), name="project-detail"),
