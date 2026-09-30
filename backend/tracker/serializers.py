@@ -103,6 +103,10 @@ class ProjectDetailSerializer(ProjectSerializer):
 
 class ContractorSerializer(serializers.ModelSerializer):
     activated = serializers.SerializerMethodField()
+    accept_rate = serializers.SerializerMethodField()
+    rejection_count = serializers.SerializerMethodField()
+    assigned_to_this_project = serializers.SerializerMethodField()
+    assigned_elsewhere = serializers.SerializerMethodField()
 
     class Meta:
         model = Contractor
@@ -114,12 +118,43 @@ class ContractorSerializer(serializers.ModelSerializer):
             "connect_status",
             "archived",
             "activated",
+            "accept_rate",
+            "rejection_count",
+            "assigned_to_this_project",
+            "assigned_elsewhere",
             "created_at",
         ]
-        read_only_fields = ["id", "connect_status", "archived", "activated", "created_at"]
+        read_only_fields = fields
 
     def get_activated(self, obj):
         return obj.user.has_usable_password()
+
+    def get_accept_rate(self, obj):
+        from .services import contractor_reliability
+
+        rate = contractor_reliability(obj)["accept_rate"]
+        return str(rate) if rate is not None else None
+
+    def get_rejection_count(self, obj):
+        from .services import contractor_reliability
+
+        return contractor_reliability(obj)["rejection_count"]
+
+    def get_assigned_to_this_project(self, obj):
+        project = self.context.get("project")
+        if project is None:
+            return False
+        from .services import contractor_assignment_markers
+
+        return contractor_assignment_markers(obj, project)["assigned_to_this_project"]
+
+    def get_assigned_elsewhere(self, obj):
+        project = self.context.get("project")
+        if project is None:
+            return False
+        from .services import contractor_assignment_markers
+
+        return contractor_assignment_markers(obj, project)["assigned_elsewhere"]
 
 
 class ContractorCreateSerializer(serializers.Serializer):

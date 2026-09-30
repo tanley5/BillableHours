@@ -20,6 +20,34 @@ class LockConflict(DRFValidationError):
         super().__init__(detail={"detail": message}, code=self.default_code)
 
 
+def contractor_reliability(contractor) -> dict:
+    """
+    Invite reliability until Submissions exist (SPEC2 §9 interim).
+
+    accept_rate = accepted / (accepted + rejected), or None if no decisions yet.
+    rejection_count = count of rejected assignments.
+    """
+    statuses = list(
+        Assignment.objects.filter(contractor=contractor).values_list("status", flat=True)
+    )
+    accepted = sum(1 for s in statuses if s == Assignment.Status.ACCEPTED)
+    rejected = sum(1 for s in statuses if s == Assignment.Status.REJECTED)
+    decided = accepted + rejected
+    return {
+        "accept_rate": (Decimal(accepted) / Decimal(decided)) if decided else None,
+        "rejection_count": rejected,
+    }
+
+
+def contractor_assignment_markers(contractor, project) -> dict:
+    active = (Assignment.Status.INVITED, Assignment.Status.ACCEPTED)
+    qs = Assignment.objects.filter(contractor=contractor, status__in=active)
+    return {
+        "assigned_to_this_project": qs.filter(project=project).exists(),
+        "assigned_elsewhere": qs.exclude(project=project).exists(),
+    }
+
+
 def assert_assignment_active(assignment: Assignment):
     if assignment.status != Assignment.Status.ACCEPTED:
         raise PermissionDenied("Assignment must be accepted before performing this action.")

@@ -62,6 +62,9 @@ describe('createClientApi', () => {
     await api.listContractors()
     expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/contractors/')
 
+    await api.listContractors(3)
+    expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/contractors/?project_id=3')
+
     await api.createContractor({ name: 'Alex', email: 'a@ex.com' })
     expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/contractors/')
 

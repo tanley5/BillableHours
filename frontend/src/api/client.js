@@ -87,8 +87,10 @@ export function createClientApi() {
     listVisits(projectId) {
       return request(`/api/projects/${projectId}/visits/`)
     },
-    listContractors() {
-      return request('/api/contractors/')
+    listContractors(projectId) {
+      const path =
+        projectId != null ? `/api/contractors/?project_id=${projectId}` : '/api/contractors/'
+      return request(path)
     },
     createContractor(payload) {
       return request('/api/contractors/', { method: 'POST', body: payload })

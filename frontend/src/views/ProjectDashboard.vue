@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import AssignContractorForm from '../components/AssignContractorForm.vue'
+import DragAssignBoard from '../components/DragAssignBoard.vue'
 
 const props = defineProps({
   project: { type: Object, required: true },
@@ -94,6 +94,10 @@ function onAssigned(assignment) {
   message.value = `Invited ${assignment.contractor?.name || 'contractor'}.`
   emit('refresh')
 }
+
+function onSaved() {
+  emit('refresh')
+}
 </script>
 
 <template>
@@ -152,10 +156,13 @@ function onAssigned(assignment) {
           </div>
         </li>
       </ul>
-      <AssignContractorForm
+      <DragAssignBoard
+        :project-id="project.id"
+        :assignments="project.assignments || []"
         :assign="assign"
-      :list-contractors="listContractors"
+        :list-contractors="listContractors"
         @assigned="onAssigned"
+        @saved="onSaved"
       />
     </section>
 

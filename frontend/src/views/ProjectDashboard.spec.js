@@ -81,7 +81,7 @@ function mountDashboard(overrides = {}) {
       ...overrides,
     },
     global: {
-      stubs: { AssignContractorForm: true },
+      stubs: { DragAssignBoard: true },
     },
   })
 }

@@ -137,7 +137,12 @@ class ContractorListCreateView(APIView):
             .order_by("contractor__name")
         )
         contractors = [m.contractor for m in roster]
-        return Response(ContractorSerializer(contractors, many=True).data)
+        ctx = {"request": request}
+        project_id = request.query_params.get("project_id")
+        if project_id is not None:
+            project = get_object_or_404(Project, pk=project_id, owner=request.user)
+            ctx["project"] = project
+        return Response(ContractorSerializer(contractors, many=True, context=ctx).data)
 
     def post(self, request):
         serializer = ContractorCreateSerializer(data=request.data, context={"request": request})
