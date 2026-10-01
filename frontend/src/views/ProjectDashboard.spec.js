@@ -21,6 +21,7 @@ const project = {
       contractor: { name: 'Alex', phone: '555-0100', email: '' },
     },
   ],
+  sub_jobs: [],
 }
 
 const jobs = [
@@ -104,42 +105,12 @@ describe('ProjectDashboard', () => {
     expect(wrapper.text()).toContain('225.00')
   })
 
-  it('nests found issues under the parent job and shows photo timeline flags', () => {
+  it('keeps legacy jobs and visits out of the primary SPEC2 view', () => {
     const wrapper = mountDashboard()
-    expect(wrapper.text()).toContain('Bathtub')
-    expect(wrapper.text()).toContain('Broken pipe')
-    expect(wrapper.text()).toMatch(/found issue/i)
-    expect(wrapper.text()).toMatch(/no location/i)
-  })
-
-  it('approves and disputes completed jobs and pending visits', async () => {
-    const onApproveJob = vi.fn().mockResolvedValue({})
-    const onDisputeVisit = vi.fn().mockResolvedValue({})
-    const wrapper = mountDashboard({ onApproveJob, onDisputeVisit })
-
-    await wrapper.get('[data-test="approve-job-1"]').trigger('click')
-    await flushPromises()
-    expect(onApproveJob).toHaveBeenCalledWith(1)
-
-    await wrapper.get('[data-test="dispute-visit-20"]').trigger('click')
-    await wrapper.get('textarea[name="dispute-comment"]').setValue('Hours look high')
-    await wrapper.get('[data-test="confirm-dispute"]').trigger('click')
-    await flushPromises()
-    expect(onDisputeVisit).toHaveBeenCalledWith(20, 'Hours look high')
-  })
-
-  it('supports bulk-approve of selected pending/complete items', async () => {
-    const onApproveJob = vi.fn().mockResolvedValue({})
-    const onApproveVisit = vi.fn().mockResolvedValue({})
-    const wrapper = mountDashboard({ onApproveJob, onApproveVisit })
-
-    await wrapper.get('input[data-test="select-job-1"]').setValue(true)
-    await wrapper.get('input[data-test="select-visit-20"]').setValue(true)
-    await wrapper.get('[data-test="bulk-approve"]').trigger('click')
-    await flushPromises()
-
-    expect(onApproveJob).toHaveBeenCalledWith(1)
-    expect(onApproveVisit).toHaveBeenCalledWith(20)
+    expect(wrapper.find('[data-test="legacy-jobs-visits"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="approve-job-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="select-visit-20"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/found issue/i)
   })
 
   it('cancels an invited assignment', async () => {

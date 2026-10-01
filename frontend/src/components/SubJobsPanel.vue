@@ -61,7 +61,7 @@ async function onCreate() {
     label.value = ''
     amount.value = ''
     beforeFile.value = null
-    message.value = 'Sub-job created with escrow authorized.'
+    message.value = 'Sub-job created; demo authorization hold placed.'
     emit('refresh')
     await refreshActivity()
   } catch (err) {
@@ -165,6 +165,10 @@ function canDetach(sj) {
 <template>
   <section class="panel" data-test="subjobs-panel">
     <h2>Sub-jobs</h2>
+    <p class="demo-note" data-test="demo-fund-note">
+      Demo mode: Create / Approve &amp; authorize places a simulated card hold (no Stripe card widget).
+      Watch balances at the Stripe Sim UI. Live Stripe will swap in via env — same buttons.
+    </p>
     <p v-if="projectFrozen" class="freeze" data-test="frozen-banner">
       Project frozen{{ frozenReason ? `: ${frozenReason}` : '' }}. Re-authorize expired escrow to continue.
     </p>
@@ -193,7 +197,9 @@ function canDetach(sj) {
           @change="beforeFile = $event.target.files?.[0] || null"
         />
       </label>
-      <button type="submit" :disabled="busy || projectFrozen">Create &amp; fund</button>
+      <button type="submit" data-test="create-fund" :disabled="busy || projectFrozen">
+        Create &amp; authorize hold
+      </button>
     </form>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -229,7 +235,7 @@ function canDetach(sj) {
             :disabled="projectFrozen"
             @click="approve(sj.id)"
           >
-            Approve &amp; fund
+            Approve &amp; authorize hold
           </button>
           <input v-model="denyReason[sj.id]" placeholder="Deny reason" :data-test="`deny-reason-${sj.id}`" />
           <button
@@ -297,6 +303,16 @@ function canDetach(sj) {
 
 <style scoped>
 .panel { display: grid; gap: 1rem; }
+.demo-note {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  background: #eef4ea;
+  border: 1px solid #c5d0c4;
+  border-radius: 0.4rem;
+  color: #2d4a34;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
 .create { display: grid; gap: 0.5rem; max-width: 24rem; }
 label { display: grid; gap: 0.25rem; font-weight: 600; }
 input, button { font: inherit; padding: 0.5rem 0.65rem; border-radius: 0.35rem; border: 1px solid #c5d0c4; }

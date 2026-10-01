@@ -1,7 +1,11 @@
-from datetime import date, timedelta
+"""Load the SPEC2 bathtub demo: sibling SubJobs + Connect-ready contractor."""
+from __future__ import annotations
+
 from decimal import Decimal
 from io import BytesIO
 
+import stripe
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -12,18 +16,19 @@ from tracker.models import (
     Assignment,
     ClientContractor,
     Contractor,
-    Job,
-    Photo,
     Project,
     User,
-    Visit,
 )
+from tracker.subjobs import create_client_subjob, create_contractor_subjob
 
 PROJECT_NAME = "Bathtub repair"
 CLIENT_EMAIL = "owner@example.com"
 CLIENT_PASSWORD = "changeme123"
 CONTRACTOR_EMAIL = "alex@example.com"
 CONTRACTOR_PASSWORD = "contractor123"
+
+# Offline / empty-key demos when stripe-sim is not contacted
+OFFLINE_CONNECT_ACCOUNT_ID = "acct_seed_alex"
 
 
 def _jpeg_content(color: str, name: str) -> ContentFile:
@@ -32,19 +37,29 @@ def _jpeg_content(color: str, name: str) -> ContentFile:
     return ContentFile(buffer.getvalue(), name=name)
 
 
-def _add_photo(job: Job, kind: str, color: str, captured_at=None) -> Photo:
-    photo = Photo(
-        job=job,
-        kind=kind,
-        captured_at=captured_at or timezone.now(),
-        location_missing=True,
+def _ensure_stripe_connect_account(*, email: str) -> str:
+    """
+    Register a Connect Express account with stripe-sim (or live) when configured.
+    Falls back to a stable offline id for unit tests / empty Stripe settings.
+    """
+    api_base = getattr(settings, "STRIPE_API_BASE", "") or ""
+    secret = settings.STRIPE_SECRET_KEY or ""
+    if not api_base or not secret:
+        return OFFLINE_CONNECT_ACCOUNT_ID
+
+    stripe.api_key = secret
+    stripe.api_base = api_base
+    account = stripe.Account.create(
+        type="express",
+        email=email,
+        capabilities={"transfers": {"requested": True}},
+        metadata={"seed": "bathtub"},
     )
-    photo.file.save(f"{job.id}-{kind}-{color}.jpg", _jpeg_content(color, f"{kind}.jpg"), save=True)
-    return photo
+    return account["id"]
 
 
 class Command(BaseCommand):
-    help = "Load the SPEC bathtub repair demo scenario (Phase 5 / Phase1 Connect)."
+    help = "Load the SPEC2 bathtub repair demo (sibling SubJobs + Connect contractor)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -87,15 +102,19 @@ class Command(BaseCommand):
             name=PROJECT_NAME,
             scope="Repair the master bathroom bathtub and address related water damage.",
             budget=Decimal("2500.00"),
+            customer_contact="homeowner@example.com",
+            status=Project.Status.CONTRACTOR_ASSIGNED,
         )
 
-        c_user, c_created = User.objects.get_or_create(
+        c_user, _ = User.objects.get_or_create(
             email=CONTRACTOR_EMAIL,
             defaults={"role": User.Role.CONTRACTOR},
         )
         c_user.role = User.Role.CONTRACTOR
         c_user.set_password(CONTRACTOR_PASSWORD)
         c_user.save()
+
+        connect_account_id = _ensure_stripe_connect_account(email=CONTRACTOR_EMAIL)
 
         contractor, _ = Contractor.objects.update_or_create(
             email=CONTRACTOR_EMAIL,
@@ -104,13 +123,13 @@ class Command(BaseCommand):
                 "name": "Alex Contractor",
                 "phone": "555-0100",
                 "connect_status": Contractor.ConnectStatus.COMPLETE,
-                "stripe_connect_account_id": "acct_seed_alex",
+                "stripe_connect_account_id": connect_account_id,
                 "archived": False,
             },
         )
         ClientContractor.objects.get_or_create(client=user, contractor=contractor)
 
-        assignment = Assignment.objects.create(
+        Assignment.objects.create(
             project=project,
             contractor=contractor,
             hourly_rate=Decimal("75.00"),
@@ -118,70 +137,32 @@ class Command(BaseCommand):
             responded_at=timezone.now(),
         )
 
-        bathtub = Job.objects.create(
-            assignment=assignment,
-            label="Bathtub",
-            notes="Main bathtub replacement",
-            status=Job.Status.OPEN,
-        )
-        _add_photo(bathtub, Photo.Kind.BEFORE, "steelblue")
-
-        found_specs = [
-            ("Broken pipe", "tomato", "coral", Job.Status.APPROVED, None),
-            ("Mold", "darkolivegreen", "yellowgreen", Job.Status.DISPUTED, "After photo is too dark — please re-shoot."),
-            ("Drywall crack", "sandybrown", "peru", Job.Status.COMPLETE, None),
+        # Sibling SubJobs (SPEC2) — no Job parent/child tree
+        client_siblings = [
+            ("Fix bathtub", Decimal("800.00"), "steelblue"),
+            ("Fix broken pipe", Decimal("400.00"), "tomato"),
+            ("Fix mold", Decimal("350.00"), "darkolivegreen"),
         ]
-        for label, before_color, after_color, status, comment in found_specs:
-            issue = Job.objects.create(
-                assignment=assignment,
+        for label, amount, color in client_siblings:
+            create_client_subjob(
+                project=project,
                 label=label,
-                parent=bathtub,
-                notes=f"Found while working on bathtub: {label.lower()}",
-                status=Job.Status.OPEN,
+                amount=amount,
+                before_file=_jpeg_content(color, f"{label}.jpg"),
             )
-            _add_photo(issue, Photo.Kind.BEFORE, before_color)
-            _add_photo(issue, Photo.Kind.AFTER, after_color)
-            issue.status = status
-            issue.client_comment = comment
-            issue.save(update_fields=["status", "client_comment", "updated_at"])
 
-        _add_photo(bathtub, Photo.Kind.AFTER, "lightskyblue")
-        bathtub.status = Job.Status.COMPLETE
-        bathtub.save(update_fields=["status", "updated_at"])
-
-        today = date.today()
-        Visit.objects.create(
-            assignment=assignment,
-            date=today - timedelta(days=5),
-            hours=Decimal("3.50"),
-            notes="Demo and material estimate",
-            status=Visit.Status.APPROVED,
-        )
-        Visit.objects.create(
-            assignment=assignment,
-            date=today - timedelta(days=2),
-            hours=Decimal("6.00"),
-            notes="Removal and rough-in",
-            status=Visit.Status.APPROVED,
-        )
-        Visit.objects.create(
-            assignment=assignment,
-            date=today - timedelta(days=1),
-            hours=Decimal("4.25"),
-            notes="Install and found-issue repairs",
-            status=Visit.Status.PENDING,
-        )
-        Visit.objects.create(
-            assignment=assignment,
-            date=today,
-            hours=Decimal("2.00"),
-            notes="Touch-up pending client review",
-            status=Visit.Status.PENDING,
+        create_contractor_subjob(
+            project=project,
+            contractor=contractor,
+            label="Fix drywall",
+            before_file=_jpeg_content("sandybrown", "drywall.jpg"),
         )
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Seeded '{PROJECT_NAME}' (project id={project.id}). "
-                f"Contractor login: {CONTRACTOR_EMAIL} / {CONTRACTOR_PASSWORD}"
+                f"Seeded '{PROJECT_NAME}' (project id={project.id}) with sibling SubJobs. "
+                f"Client: {email} / {password}. "
+                f"Contractor: {CONTRACTOR_EMAIL} / {CONTRACTOR_PASSWORD} "
+                f"(Connect {connect_account_id})."
             )
         )
